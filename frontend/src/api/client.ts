@@ -189,6 +189,38 @@ export interface InsightsData {
   byCompanyRole: InsightsByCompanyRole[];
 }
 
+// ─── Payroll report types ────────────────────────────────────────────────────
+
+export interface PayrollDay {
+  work_date: string;
+  total_hours: number;
+  standard_daily_quota: number;
+  daily_deficit_hours: number;
+  hours_100: number;
+  hours_125: number;
+  hours_150: number;
+  applied_hourly_rate: number;
+  gross_daily_salary: number;
+  night_minutes: number;
+}
+
+export interface PayrollMonthly {
+  total_hours: number;
+  total_deficit: number;
+  total_salary: number;
+  total_hours_100: number;
+  total_hours_125: number;
+  total_hours_150: number;
+  work_days: number;
+}
+
+export interface PayrollReport {
+  employee: { employee_id: string; full_name: string; status: string; standard_daily_quota: number };
+  month: string;
+  days: PayrollDay[];
+  monthly: PayrollMonthly;
+}
+
 // ─── Fetch wrapper ────────────────────────────────────────────────────────────
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -292,5 +324,26 @@ export const api = {
     if (filters?.date_to) qs.set('date_to', filters.date_to);
     const query = qs.toString();
     return request<InsightsData>(`/admin/insights${query ? '?' + query : ''}`);
+  },
+
+  // Payroll report
+  getPayrollReport: (employeeId: string, month: string) =>
+    request<PayrollReport>(`/admin/payroll-report?employee_id=${employeeId}&month=${month}`),
+
+  downloadPayrollExcel: async (employeeId: string, month: string) => {
+    const res = await fetch(`${BASE}/admin/payroll-report/export?employee_id=${employeeId}&month=${month}`);
+    if (!res.ok) {
+      const data = await res.json();
+      throw data as ApiError;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `payroll_${employeeId}_${month}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 };

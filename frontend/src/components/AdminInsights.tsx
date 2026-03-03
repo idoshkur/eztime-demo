@@ -4,6 +4,7 @@ import {
   Employee,
   InsightsData,
   InsightsFilters,
+  PayrollReport,
 } from '../api/client';
 
 function round2(n: number): string {
@@ -22,6 +23,14 @@ export default function AdminInsights() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
+  // Payroll report state
+  const [payrollEmployee, setPayrollEmployee] = useState('');
+  const [payrollMonth, setPayrollMonth] = useState('');
+  const [payrollReport, setPayrollReport] = useState<PayrollReport | null>(null);
+  const [payrollLoading, setPayrollLoading] = useState(false);
+  const [payrollError, setPayrollError] = useState('');
+  const [downloading, setDownloading] = useState(false);
+
   useEffect(() => {
     api.getEmployees().then(setEmployees).catch(() => {});
   }, []);
@@ -35,7 +44,6 @@ export default function AdminInsights() {
       .finally(() => setLoading(false));
   };
 
-  // Initial load
   useEffect(() => {
     fetchInsights();
   }, []);
@@ -57,6 +65,34 @@ export default function AdminInsights() {
     setFilterDateFrom('');
     setFilterDateTo('');
     fetchInsights();
+  };
+
+  // Payroll report handlers
+  const handleGeneratePayroll = async () => {
+    if (!payrollEmployee || !payrollMonth) return;
+    setPayrollLoading(true);
+    setPayrollError('');
+    setPayrollReport(null);
+    try {
+      const report = await api.getPayrollReport(payrollEmployee, payrollMonth);
+      setPayrollReport(report);
+    } catch {
+      setPayrollError('Failed to generate payroll report.');
+    } finally {
+      setPayrollLoading(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!payrollEmployee || !payrollMonth) return;
+    setDownloading(true);
+    try {
+      await api.downloadPayrollExcel(payrollEmployee, payrollMonth);
+    } catch {
+      setPayrollError('Failed to download Excel file.');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -116,7 +152,7 @@ export default function AdminInsights() {
       </div>
 
       {loading ? (
-        <div className="loading">Loading insights…</div>
+        <div className="loading">Loading insights...</div>
       ) : !data ? (
         <p className="empty-state">Could not load insights.</p>
       ) : (
@@ -257,7 +293,7 @@ export default function AdminInsights() {
 
           {/* By Date */}
           {data.byDate.length > 0 && (
-            <div>
+            <div style={{ marginBottom: '1.5rem' }}>
               <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' }}>Hours by Date</h3>
               <div className="table-wrapper">
                 <table>
@@ -283,6 +319,156 @@ export default function AdminInsights() {
           )}
         </>
       )}
+
+      {/* ── Payroll Report Section ──────────────────────────────────────────────── */}
+      <div style={{ borderTop: '2px solid var(--border)', marginTop: '1.5rem', paddingTop: '1.5rem' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
+          Payroll Report
+        </h2>
+
+        <div className="form-grid" style={{ marginBottom: '1rem' }}>
+          <div className="form-group">
+            <label htmlFor="pr-employee">Employee</label>
+            <select
+              id="pr-employee"
+              value={payrollEmployee}
+              onChange={(e) => { setPayrollEmployee(e.target.value); setPayrollReport(null); }}
+            >
+              <option value="">Select employee...</option>
+              {employees.map((emp) => (
+                <option key={emp.employee_id} value={emp.employee_id}>
+                  {emp.full_name} ({emp.employee_id})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="pr-month">Month</label>
+            <input
+              id="pr-month"
+              type="month"
+              value={payrollMonth}
+              onChange={(e) => { setPayrollMonth(e.target.value); setPayrollReport(null); }}
+            />
+          </div>
+
+          <div className="form-group" style={{ justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className="btn-primary"
+                disabled={!payrollEmployee || !payrollMonth || payrollLoading}
+                onClick={handleGeneratePayroll}
+              >
+                {payrollLoading ? 'Generating...' : 'Generate Report'}
+              </button>
+              {payrollReport && (
+                <button
+                  className="btn-secondary"
+                  disabled={downloading}
+                  onClick={handleDownloadExcel}
+                >
+                  {downloading ? 'Downloading...' : 'Download Excel'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {payrollError && (
+          <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{payrollError}</div>
+        )}
+
+        {payrollReport && (
+          <>
+            {/* Monthly Summary KPIs */}
+            <div className="kpi-grid" style={{ marginBottom: '1.25rem' }}>
+              <div className="kpi-card">
+                <div className="kpi-value">{round2(payrollReport.monthly.total_hours)}</div>
+                <div className="kpi-label">Total Hours</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-value" style={{ color: payrollReport.monthly.total_deficit > 0 ? 'var(--red)' : 'var(--green)' }}>
+                  {round2(payrollReport.monthly.total_deficit)}
+                </div>
+                <div className="kpi-label">Total Deficit</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-value" style={{ color: 'var(--green)' }}>
+                  {round2(payrollReport.monthly.total_salary)}
+                </div>
+                <div className="kpi-label">Monthly Paycheck</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-value">{payrollReport.monthly.work_days}</div>
+                <div className="kpi-label">Work Days</div>
+              </div>
+            </div>
+
+            {/* Daily Payroll Table */}
+            {payrollReport.days.length > 0 ? (
+              <div className="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Hours</th>
+                      <th>Quota</th>
+                      <th>Deficit</th>
+                      <th>100%</th>
+                      <th>125%</th>
+                      <th>150%</th>
+                      <th>Rate</th>
+                      <th>Daily Pay</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payrollReport.days.map((day) => (
+                      <tr key={day.work_date}>
+                        <td className="mono">{day.work_date}</td>
+                        <td className="mono">{round2(day.total_hours)}</td>
+                        <td className="mono">{day.standard_daily_quota}</td>
+                        <td className="mono" style={{ color: day.daily_deficit_hours > 0 ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>
+                          {day.daily_deficit_hours > 0 ? `-${round2(day.daily_deficit_hours)}` : '0.00'}
+                        </td>
+                        <td className="mono">{round2(day.hours_100)}</td>
+                        <td className="mono" style={{ color: day.hours_125 > 0 ? 'var(--amber)' : undefined }}>
+                          {round2(day.hours_125)}
+                        </td>
+                        <td className="mono" style={{ color: day.hours_150 > 0 ? 'var(--red)' : undefined }}>
+                          {round2(day.hours_150)}
+                        </td>
+                        <td className="mono">{day.applied_hourly_rate}</td>
+                        <td className="mono" style={{ fontWeight: 600, color: 'var(--green)' }}>
+                          {round2(day.gross_daily_salary)}
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Totals Row */}
+                    <tr style={{ background: '#f0fdf4', fontWeight: 600 }}>
+                      <td>TOTAL</td>
+                      <td className="mono">{round2(payrollReport.monthly.total_hours)}</td>
+                      <td></td>
+                      <td className="mono" style={{ color: 'var(--red)' }}>
+                        {payrollReport.monthly.total_deficit > 0 ? `-${round2(payrollReport.monthly.total_deficit)}` : '0.00'}
+                      </td>
+                      <td className="mono">{round2(payrollReport.monthly.total_hours_100)}</td>
+                      <td className="mono">{round2(payrollReport.monthly.total_hours_125)}</td>
+                      <td className="mono">{round2(payrollReport.monthly.total_hours_150)}</td>
+                      <td></td>
+                      <td className="mono" style={{ color: 'var(--green)', fontSize: '1rem' }}>
+                        {round2(payrollReport.monthly.total_salary)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="empty-state">No time entries found for this employee in {payrollMonth}.</p>
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

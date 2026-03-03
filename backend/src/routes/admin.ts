@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import * as XLSX from 'xlsx';
 import { getDb } from '../db';
 import { parseExcelBuffer } from '../utils/excelParser';
 import { upsertExcelData } from '../services/adminUploadService';
+import { calculateDailyPayroll } from '../services/payrollService';
 
 const router = Router();
 
@@ -406,6 +408,188 @@ router.get('/insights', async (req: Request, res: Response) => {
     byDate: byDateResult.rows,
     byCompanyRole: byCompanyRoleResult.rows,
   });
+});
+
+// ─── Payroll Report helpers ──────────────────────────────────────────────────
+
+interface PayrollReportDay {
+  work_date: string;
+  total_hours: number;
+  standard_daily_quota: number;
+  daily_deficit_hours: number;
+  hours_100: number;
+  hours_125: number;
+  hours_150: number;
+  applied_hourly_rate: number;
+  gross_daily_salary: number;
+  night_minutes: number;
+}
+
+interface PayrollReportMonthly {
+  total_hours: number;
+  total_deficit: number;
+  total_salary: number;
+  total_hours_100: number;
+  total_hours_125: number;
+  total_hours_150: number;
+  work_days: number;
+}
+
+async function buildPayrollReport(employeeId: string, month: string) {
+  const db = getDb();
+
+  // Validate employee
+  const empResult = await db.execute({
+    sql: 'SELECT employee_id, full_name, status, standard_daily_quota FROM employees WHERE employee_id = ?',
+    args: [employeeId],
+  });
+  if (empResult.rows.length === 0) return null;
+
+  const employee = empResult.rows[0] as unknown as {
+    employee_id: string; full_name: string; status: string; standard_daily_quota: number;
+  };
+
+  // Get all work dates in the month
+  const dateFrom = `${month}-01`;
+  const lastDay = new Date(parseInt(month.split('-')[0]), parseInt(month.split('-')[1]), 0).getDate();
+  const dateTo = `${month}-${String(lastDay).padStart(2, '0')}`;
+
+  const datesResult = await db.execute({
+    sql: 'SELECT DISTINCT work_date FROM time_entries WHERE employee_id = ? AND work_date >= ? AND work_date <= ? ORDER BY work_date',
+    args: [employeeId, dateFrom, dateTo],
+  });
+
+  const days: PayrollReportDay[] = [];
+  const monthly: PayrollReportMonthly = {
+    total_hours: 0, total_deficit: 0, total_salary: 0,
+    total_hours_100: 0, total_hours_125: 0, total_hours_150: 0, work_days: 0,
+  };
+
+  for (const row of datesResult.rows) {
+    const workDate = (row as unknown as { work_date: string }).work_date;
+    const payroll = await calculateDailyPayroll(employeeId, workDate);
+    if (!payroll) continue;
+
+    const day: PayrollReportDay = {
+      work_date: workDate,
+      total_hours: Math.round(payroll.total_hours * 100) / 100,
+      standard_daily_quota: payroll.standard_daily_quota,
+      daily_deficit_hours: Math.round(payroll.daily_deficit_hours * 100) / 100,
+      hours_100: Math.round(payroll.hours_100 * 100) / 100,
+      hours_125: Math.round(payroll.hours_125 * 100) / 100,
+      hours_150: Math.round(payroll.hours_150 * 100) / 100,
+      applied_hourly_rate: payroll.applied_hourly_rate,
+      gross_daily_salary: Math.round(payroll.gross_daily_salary * 100) / 100,
+      night_minutes: payroll.night_minutes,
+    };
+    days.push(day);
+
+    monthly.total_hours += day.total_hours;
+    monthly.total_deficit += day.daily_deficit_hours;
+    monthly.total_salary += day.gross_daily_salary;
+    monthly.total_hours_100 += day.hours_100;
+    monthly.total_hours_125 += day.hours_125;
+    monthly.total_hours_150 += day.hours_150;
+    monthly.work_days += 1;
+  }
+
+  // Round monthly totals
+  monthly.total_hours = Math.round(monthly.total_hours * 100) / 100;
+  monthly.total_deficit = Math.round(monthly.total_deficit * 100) / 100;
+  monthly.total_salary = Math.round(monthly.total_salary * 100) / 100;
+  monthly.total_hours_100 = Math.round(monthly.total_hours_100 * 100) / 100;
+  monthly.total_hours_125 = Math.round(monthly.total_hours_125 * 100) / 100;
+  monthly.total_hours_150 = Math.round(monthly.total_hours_150 * 100) / 100;
+
+  return { employee, month, days, monthly };
+}
+
+// ─── GET /api/admin/payroll-report ──────────────────────────────────────────
+
+router.get('/payroll-report', async (req: Request, res: Response) => {
+  const employee_id = req.query.employee_id as string | undefined;
+  const month = req.query.month as string | undefined;
+
+  if (!employee_id || !month) {
+    return res.status(400).json({
+      error: { code: 'MISSING_PARAMS', message: 'employee_id and month (YYYY-MM) are required' },
+    });
+  }
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({
+      error: { code: 'INVALID_MONTH', message: 'month must be YYYY-MM format' },
+    });
+  }
+
+  const report = await buildPayrollReport(employee_id, month);
+  if (!report) {
+    return res.status(404).json({
+      error: { code: 'EMPLOYEE_NOT_FOUND', message: `Employee "${employee_id}" not found` },
+    });
+  }
+
+  res.json(report);
+});
+
+// ─── GET /api/admin/payroll-report/export ───────────────────────────────────
+
+router.get('/payroll-report/export', async (req: Request, res: Response) => {
+  const employee_id = req.query.employee_id as string | undefined;
+  const month = req.query.month as string | undefined;
+
+  if (!employee_id || !month) {
+    return res.status(400).json({
+      error: { code: 'MISSING_PARAMS', message: 'employee_id and month (YYYY-MM) are required' },
+    });
+  }
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({
+      error: { code: 'INVALID_MONTH', message: 'month must be YYYY-MM format' },
+    });
+  }
+
+  const report = await buildPayrollReport(employee_id, month);
+  if (!report) {
+    return res.status(404).json({
+      error: { code: 'EMPLOYEE_NOT_FOUND', message: `Employee "${employee_id}" not found` },
+    });
+  }
+
+  // Build worksheet data
+  const headers = ['Date', 'Hours Worked', 'Quota', 'Deficit', '100% Hours', '125% Hours', '150% Hours', 'Hourly Rate', 'Daily Pay', 'Night Min'];
+  const rows = report.days.map((d) => [
+    d.work_date, d.total_hours, d.standard_daily_quota, d.daily_deficit_hours,
+    d.hours_100, d.hours_125, d.hours_150, d.applied_hourly_rate, d.gross_daily_salary, d.night_minutes,
+  ]);
+  // Totals row
+  rows.push([
+    'TOTAL', report.monthly.total_hours, '', report.monthly.total_deficit,
+    report.monthly.total_hours_100, report.monthly.total_hours_125, report.monthly.total_hours_150,
+    '', report.monthly.total_salary, '',
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([
+    [`Payroll Report: ${report.employee.full_name} (${report.employee.employee_id}) — ${month}`],
+    [],
+    headers,
+    ...rows,
+  ]);
+
+  // Set column widths
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 8 },
+    { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Daily Payroll');
+
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  const filename = `payroll_${employee_id}_${month}.xlsx`;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buffer);
 });
 
 export default router;

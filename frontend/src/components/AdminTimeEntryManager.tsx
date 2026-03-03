@@ -117,7 +117,8 @@ export default function AdminTimeEntryManager() {
   };
 
   const canCreate = createForm.employee_id && createForm.work_date && createForm.company_name &&
-    createForm.role_name && createForm.start_time && createForm.end_time;
+    createForm.role_name && createForm.start_time && createForm.end_time &&
+    createForm.start_time !== createForm.end_time;
 
   // ── Inline edit ─────────────────────────────────────────────────────────────
 
@@ -302,9 +303,15 @@ export default function AdminTimeEntryManager() {
             </div>
           </div>
           {createForm.start_time && createForm.end_time && (
-            <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
-              Duration: {formatDuration(createForm.start_time, createForm.end_time)}
-            </div>
+            createForm.start_time === createForm.end_time ? (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: 'var(--red)', fontWeight: 600 }}>
+                Start and end time cannot be the same.
+              </div>
+            ) : (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                Duration: {formatDuration(createForm.start_time, createForm.end_time)}
+              </div>
+            )
           )}
           <div style={{ marginTop: '1rem' }}>
             <button

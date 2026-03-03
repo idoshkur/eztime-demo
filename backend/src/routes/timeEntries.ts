@@ -32,6 +32,7 @@ async function validateEntry(
   role_name: string,
   start_time: string,
   end_time: string,
+  excludeId?: string,
 ): Promise<boolean> {
   if (!isValidDate(work_date)) {
     res.status(400).json({ error: { code: 'INVALID_DATE', message: 'work_date must be YYYY-MM-DD' } });
@@ -108,6 +109,36 @@ async function validateEntry(
       },
     });
     return false;
+  }
+
+  // ── Overlap detection ───────────────────────────────────────────────────────
+  const existingResult = await db.execute({
+    sql: 'SELECT id, start_time, end_time FROM time_entries WHERE employee_id = ? AND work_date = ?',
+    args: [employee_id, work_date],
+  });
+
+  const newStart = timeToMinutes(start_time);
+  let newEnd = timeToMinutes(end_time);
+  if (newEnd <= newStart) newEnd += 24 * 60;
+
+  for (const row of existingResult.rows) {
+    const existing = row as unknown as { id: string; start_time: string; end_time: string };
+    if (excludeId && existing.id === excludeId) continue;
+
+    const exStart = timeToMinutes(existing.start_time);
+    let exEnd = timeToMinutes(existing.end_time);
+    if (exEnd <= exStart) exEnd += 24 * 60;
+
+    // Two intervals [a,b) and [c,d) overlap when a < d AND c < b
+    if (newStart < exEnd && exStart < newEnd) {
+      res.status(400).json({
+        error: {
+          code: 'OVERLAP',
+          message: `This entry (${start_time}–${end_time}) overlaps with an existing entry (${existing.start_time}–${existing.end_time}) on ${work_date}`,
+        },
+      });
+      return false;
+    }
   }
 
   return true;
@@ -192,7 +223,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   const end_time     = body.end_time     ?? (existing.end_time as string);
   const employee_id  = existing.employee_id as string;
 
-  const valid = await validateEntry(db, res, employee_id, work_date, company_name, role_name, start_time, end_time);
+  const valid = await validateEntry(db, res, employee_id, work_date, company_name, role_name, start_time, end_time, id);
   if (!valid) return;
 
   await db.execute({
