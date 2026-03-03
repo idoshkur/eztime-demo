@@ -21,6 +21,13 @@ function isValidDate(d: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d));
 }
 
+/** Shift a YYYY-MM-DD date by ±N days. */
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00Z'); // noon avoids DST edge cases
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
 // ─── Shared validation ──────────────────────────────────────────────────────
 
 async function validateEntry(
@@ -111,7 +118,7 @@ async function validateEntry(
     return false;
   }
 
-  // ── Overlap detection ───────────────────────────────────────────────────────
+  // ── Overlap detection (same day) ────────────────────────────────────────────
   const existingResult = await db.execute({
     sql: 'SELECT id, start_time, end_time FROM time_entries WHERE employee_id = ? AND work_date = ?',
     args: [employee_id, work_date],
@@ -138,6 +145,64 @@ async function validateEntry(
         },
       });
       return false;
+    }
+  }
+
+  // ── Cross-day overlap: previous day's overnight entries spilling into today ─
+  const prevDate = shiftDate(work_date, -1);
+  const prevDayResult = await db.execute({
+    sql: 'SELECT id, start_time, end_time FROM time_entries WHERE employee_id = ? AND work_date = ?',
+    args: [employee_id, prevDate],
+  });
+
+  for (const row of prevDayResult.rows) {
+    const prev = row as unknown as { id: string; start_time: string; end_time: string };
+    if (excludeId && prev.id === excludeId) continue;
+
+    const pStart = timeToMinutes(prev.start_time);
+    const pEnd = timeToMinutes(prev.end_time);
+    if (pEnd >= pStart) continue; // Doesn't cross midnight — no spill into today
+
+    // The overnight entry spills into today as [00:00, pEnd).
+    // Overlap exists if the new entry starts before the spill ends.
+    if (newStart < pEnd) {
+      res.status(400).json({
+        error: {
+          code: 'OVERLAP',
+          message: `This entry (${start_time}–${end_time}) overlaps with an overnight entry (${prev.start_time}–${prev.end_time}) from ${prevDate}`,
+        },
+      });
+      return false;
+    }
+  }
+
+  // ── Cross-day overlap: if new entry crosses midnight, check next day's entries
+  const newCrossesMidnight = timeToMinutes(end_time) <= timeToMinutes(start_time);
+  if (newCrossesMidnight) {
+    const nextDate = shiftDate(work_date, 1);
+    const nextDayResult = await db.execute({
+      sql: 'SELECT id, start_time, end_time FROM time_entries WHERE employee_id = ? AND work_date = ?',
+      args: [employee_id, nextDate],
+    });
+
+    const spillEnd = timeToMinutes(end_time); // New entry spills [00:00, spillEnd) into next day
+
+    for (const row of nextDayResult.rows) {
+      const next = row as unknown as { id: string; start_time: string; end_time: string };
+      if (excludeId && next.id === excludeId) continue;
+
+      const nxStart = timeToMinutes(next.start_time);
+
+      // Overlap exists if the next day's entry starts before the spill ends.
+      if (nxStart < spillEnd) {
+        res.status(400).json({
+          error: {
+            code: 'OVERLAP',
+            message: `This overnight entry (${start_time}–${end_time}) overlaps with an entry (${next.start_time}–${next.end_time}) on ${nextDate}`,
+          },
+        });
+        return false;
+      }
     }
   }
 
