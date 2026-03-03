@@ -6,7 +6,7 @@
 
 ---
 
-## AI Tools Disclosure
+## AI Tools 
 
 This project was built with extensive use of AI tools:
 - **Claude Code (Anthropic)** — Used for the entire codebase implementation: backend, frontend, database, deployment, and debugging. All code was generated, reviewed, and iterated through Claude Code.
@@ -311,1338 +311,79 @@ The `details` field is optional and only included when additional context is ava
 | `employee_id` | Query | Yes | string | The employee identifier (e.g., `"EMP-001"`) |
 | `work_date` | Query | Yes | string | The date to analyze, format `YYYY-MM-DD` (e.g., `"2025-01-15"`) |
 
-### Example Request
+### Example Request (copy-paste into terminal)
 
-```
-GET /api/payroll/daily?employee_id=EMP-001&work_date=2025-01-15
+```bash
+curl "https://eztime-demo.onrender.com/api/payroll/daily?employee_id=E1001&work_date=2026-02-08"
 ```
 
 ### Success Response (200 OK)
 
 ```json
 {
-  "employee_id": "EMP-001",
-  "work_date": "2025-01-15",
-  "standard_daily_quota": 8,
-  "total_worked_minutes": 630,
-  "total_hours": 10.5,
+  "employee_id": "E1001",
+  "work_date": "2026-02-08",
+  "standard_daily_quota": 9,
+  "total_worked_minutes": 600,
+  "total_hours": 10,
   "night_minutes": 0,
   "overtime_threshold": 8,
   "hours_100": 8,
   "hours_125": 2,
-  "hours_150": 0.5,
-  "applied_hourly_rate": 80,
-  "gross_daily_salary": 900,
+  "hours_150": 0,
+  "applied_hourly_rate": 68,
+  "gross_daily_salary": 714,
   "daily_deficit_hours": 0,
   "entries": [
     {
-      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "work_date": "2025-01-15",
-      "employee_id": "EMP-001",
-      "company_name": "Logistics Co",
-      "role_name": "Warehouse Worker",
-      "start_time": "07:00",
-      "end_time": "15:30",
-      "created_at": "2025-01-15T07:00:12.000Z"
-    },
-    {
-      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-      "work_date": "2025-01-15",
-      "employee_id": "EMP-001",
-      "company_name": "Security Ltd",
-      "role_name": "Guard",
-      "start_time": "17:00",
-      "end_time": "19:00",
-      "created_at": "2025-01-15T17:00:05.000Z"
+      "id": "3e74d9fd-b454-40ea-a28c-c3a01ecb5e5f",
+      "work_date": "2026-02-08",
+      "employee_id": "E1001",
+      "company_name": "חברת בת ה",
+      "role_name": "מחסנאי",
+      "start_time": "08:00",
+      "end_time": "18:00"
     }
   ],
   "breakdown_by_site_role": [
-    {
-      "company_name": "Logistics Co",
-      "role_name": "Warehouse Worker",
-      "minutes": 510,
-      "hours": 8.5,
-      "entry_count": 1
-    },
-    {
-      "company_name": "Security Ltd",
-      "role_name": "Guard",
-      "minutes": 120,
-      "hours": 2,
-      "entry_count": 1
-    }
-  ],
-  "warnings": []
+    { "company_name": "חברת בת ה", "role_name": "מחסנאי", "minutes": 600, "hours": 10, "entry_count": 1 }
+  ]
 }
 ```
 
-> **Note:** The `warnings` array is present when issues are detected — for example, if a rate is missing for an entry: `"No hourly rate found for: Security Ltd/Guard — salary may be incorrect"`.
+> **Note:** A `warnings` array appears when issues are detected (e.g., missing rate for an entry).
 
-### Response Field Descriptions
+### Key Response Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `employee_id` | string | The employee identifier |
-| `work_date` | string | The work date (YYYY-MM-DD) |
-| `standard_daily_quota` | number | Expected daily work hours (e.g., 8) |
-| `total_worked_minutes` | number | Total minutes worked across all entries |
-| `total_hours` | number | Total hours worked (total_worked_minutes / 60) |
-| `night_minutes` | number | Minutes worked between 22:00–06:00 |
-| `overtime_threshold` | number | 8 normally, or 7 if night_minutes >= 120 |
-| `hours_100` | number | Hours paid at 100% (up to threshold) |
-| `hours_125` | number | Hours paid at 125% (threshold to 10h) |
-| `hours_150` | number | Hours paid at 150% (above 10h) |
-| `applied_hourly_rate` | number | MAX hourly rate across all entries that day |
-| `gross_daily_salary` | number | Calculated: `(h100 * rate) + (h125 * rate * 1.25) + (h150 * rate * 1.5)` |
-| `daily_deficit_hours` | number | `max(quota - total_hours, 0)` |
-| `entries` | array | All raw time entries for that day |
-| `breakdown_by_site_role` | array | Hours grouped by company + role combination |
+| Field | Description |
+|-------|-------------|
+| `total_hours` | Total hours worked (sum of all entries) |
+| `night_minutes` | Minutes in 22:00–06:00 window |
+| `overtime_threshold` | 8h standard, or 7h if night_minutes >= 120 |
+| `hours_100` / `hours_125` / `hours_150` | Overtime tier breakdown |
+| `applied_hourly_rate` | MAX rate across all entries that day |
+| `gross_daily_salary` | `(h100 × rate) + (h125 × rate × 1.25) + (h150 × rate × 1.5)` |
+| `daily_deficit_hours` | `max(quota - total_hours, 0)` |
+| `breakdown_by_site_role` | Hours grouped by company + role |
 
-### Error Response — Missing Parameters (400)
+### Error Codes
 
-```json
-{
-  "error": {
-    "code": "MISSING_PARAMS",
-    "message": "Query params employee_id and work_date are required"
-  }
-}
-```
-
-### Error Response — Employee Not Found (404)
-
-```json
-{
-  "error": {
-    "code": "EMPLOYEE_NOT_FOUND",
-    "message": "Employee \"EMP-999\" not found"
-  }
-}
-```
-
-### Possible Error Codes
-
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `MISSING_PARAMS` | 400 | `employee_id` or `work_date` query param not provided |
-| `EMPLOYEE_NOT_FOUND` | 404 | Employee ID does not exist in the system |
+| Code | Status | Description |
+|------|--------|-------------|
+| `MISSING_PARAMS` | 400 | Missing `employee_id` or `work_date` |
+| `EMPLOYEE_NOT_FOUND` | 404 | Employee ID does not exist |
 
 ---
 
-# Bonus 2: API Implementation
-
-The API is fully implemented and live at:
+# Bonus 2: Full REST API (22 Endpoints)
 
 **Base URL:** `https://eztime-demo.onrender.com/api`
 
----
-
-## Employee Endpoints
-
-### 1. List All Employees
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/employees` |
-| **Method** | `GET` |
-| **Purpose** | Retrieve a list of all employees, sorted by name. |
-
-**Parameters:** None
-
-**Success Response (200 OK):**
-
-```json
-[
-  {
-    "employee_id": "EMP-001",
-    "full_name": "Alice Johnson",
-    "status": "active",
-    "standard_daily_quota": 8
-  },
-  {
-    "employee_id": "EMP-002",
-    "full_name": "Bob Smith",
-    "status": "active",
-    "standard_daily_quota": 8
-  }
-]
-```
+All examples below are **working curl commands** — copy-paste into your terminal to test against the live system.
 
 ---
 
-### 2. Create Employee
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/employees` |
-| **Method** | `POST` |
-| **Purpose** | Create a new employee with optional allowed companies and roles. |
-
-**Request Body:**
-
-| Parameter | Required | Type | Description |
-|-----------|----------|------|-------------|
-| `employee_id` | Yes | string | Unique employee identifier |
-| `full_name` | Yes | string | Employee's full name |
-| `status` | No | string | `"active"` or `"inactive"` (default: `"active"`) |
-| `standard_daily_quota` | No | number | Daily work hour quota (default: `8`) |
-| `allowed_companies` | No | string[] | List of allowed company names |
-| `allowed_roles` | No | string[] | List of allowed role names |
-
-**Example Request:**
-
-```json
-POST /api/employees
-{
-  "employee_id": "EMP-003",
-  "full_name": "Charlie Davis",
-  "status": "active",
-  "standard_daily_quota": 8,
-  "allowed_companies": ["Logistics Co", "Security Ltd"],
-  "allowed_roles": ["Guard", "Driver"]
-}
-```
-
-**Success Response (201 Created):**
-
-```json
-{
-  "employee_id": "EMP-003",
-  "full_name": "Charlie Davis",
-  "status": "active",
-  "standard_daily_quota": 8
-}
-```
-
-**Error Response — Missing Fields (400):**
-
-```json
-{
-  "error": {
-    "code": "MISSING_FIELDS",
-    "message": "employee_id and full_name are required"
-  }
-}
-```
-
-**Error Response — Employee Already Exists (409):**
-
-```json
-{
-  "error": {
-    "code": "EMPLOYEE_EXISTS",
-    "message": "Employee \"EMP-003\" already exists"
-  }
-}
-```
-
----
-
-### 3. Get Employee Options
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/employees/:employeeId/options` |
-| **Method** | `GET` |
-| **Purpose** | Retrieve the list of allowed companies and roles for a specific employee. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employeeId` | URL Path | Yes | string | The employee identifier |
-
-**Example Request:**
-
-```
-GET /api/employees/EMP-001/options
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "allowed_companies": ["Logistics Co", "Security Ltd"],
-  "allowed_roles": ["Guard", "Warehouse Worker"]
-}
-```
-
-**Error Response — Employee Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "EMPLOYEE_NOT_FOUND",
-    "message": "Employee \"EMP-999\" not found"
-  }
-}
-```
-
----
-
-### 4. Update Employee
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/employees/:employeeId` |
-| **Method** | `PUT` |
-| **Purpose** | Update employee details (name, status, or quota). |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employeeId` | URL Path | Yes | string | The employee identifier |
-| `full_name` | Body | No | string | Updated name |
-| `status` | Body | No | string | `"active"` or `"inactive"` |
-| `standard_daily_quota` | Body | No | number | Updated daily quota |
-
-At least one body field must be provided.
-
-**Example Request:**
-
-```json
-PUT /api/employees/EMP-001
-{
-  "full_name": "Alice Johnson-Smith",
-  "standard_daily_quota": 7
-}
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "employee_id": "EMP-001",
-  "full_name": "Alice Johnson-Smith",
-  "status": "active",
-  "standard_daily_quota": 7
-}
-```
-
-**Error Response — Employee Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "EMPLOYEE_NOT_FOUND",
-    "message": "Employee \"EMP-999\" not found"
-  }
-}
-```
-
-**Error Response — No Fields Provided (400):**
-
-```json
-{
-  "error": {
-    "code": "NO_FIELDS",
-    "message": "Provide at least one field to update"
-  }
-}
-```
-
----
-
-### 5. Delete Employee
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/employees/:employeeId` |
-| **Method** | `DELETE` |
-| **Purpose** | Delete an employee and cascade-delete all related data (time entries, rates, allowed companies/roles). |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employeeId` | URL Path | Yes | string | The employee identifier |
-
-**Example Request:**
-
-```
-DELETE /api/employees/EMP-003
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "success": true,
-  "deleted": {
-    "time_entries": 15,
-    "rates": 3,
-    "allowed_companies": 2,
-    "allowed_roles": 2
-  }
-}
-```
-
-**Error Response — Employee Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "EMPLOYEE_NOT_FOUND",
-    "message": "Employee \"EMP-999\" not found"
-  }
-}
-```
-
----
-
-## Time Entry Endpoints
-
-### 6. Create Time Entry
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/time-entries` |
-| **Method** | `POST` |
-| **Purpose** | Create a new time entry with full validation: employee exists, company/role authorized, rate exists, no overlapping shifts, valid time format. |
-
-**Request Body:**
-
-| Parameter | Required | Type | Description |
-|-----------|----------|------|-------------|
-| `employee_id` | Yes | string | Employee identifier |
-| `work_date` | Yes | string | Date in `YYYY-MM-DD` format |
-| `company_name` | Yes | string | Company the employee worked for |
-| `role_name` | Yes | string | Role the employee filled |
-| `start_time` | Yes | string | Start time in `HH:MM` format (24-hour) |
-| `end_time` | Yes | string | End time in `HH:MM` format (24-hour) |
-
-**Example Request:**
-
-```json
-POST /api/time-entries
-{
-  "employee_id": "EMP-001",
-  "work_date": "2025-01-15",
-  "company_name": "Logistics Co",
-  "role_name": "Warehouse Worker",
-  "start_time": "08:00",
-  "end_time": "16:00"
-}
-```
-
-**Success Response (201 Created):**
-
-```json
-{
-  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "work_date": "2025-01-15",
-  "employee_id": "EMP-001",
-  "company_name": "Logistics Co",
-  "role_name": "Warehouse Worker",
-  "start_time": "08:00",
-  "end_time": "16:00",
-  "created_at": "2025-01-15T08:00:00.000Z"
-}
-```
-
-**Error Response — Missing Fields (400):**
-
-```json
-{
-  "error": {
-    "code": "MISSING_FIELDS",
-    "message": "Missing required fields: employee_id, work_date"
-  }
-}
-```
-
-**Error Response — Employee Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "EMPLOYEE_NOT_FOUND",
-    "message": "Employee \"EMP-999\" not found"
-  }
-}
-```
-
-**Error Response — Rate Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "RATE_NOT_FOUND",
-    "message": "No rate found for employee \"EMP-001\" at company \"Unknown Co\" with role \"Guard\""
-  }
-}
-```
-
-**Error Response — Overlap Detected (400):**
-
-```json
-{
-  "error": {
-    "code": "OVERLAP",
-    "message": "This entry (08:00–16:00) overlaps with an existing entry (07:00–12:00) on 2025-01-15"
-  }
-}
-```
-
-**Error Response — Cross-Day Overlap (400):**
-An overnight shift on the previous day blocks early-morning entries on the next day:
-
-```json
-{
-  "error": {
-    "code": "OVERLAP",
-    "message": "This entry (01:00–05:00) overlaps with an overnight entry (22:00–06:00) from 2025-01-14"
-  }
-}
-```
-
-**Error Response — Company Not Allowed (400):**
-
-```json
-{
-  "error": {
-    "code": "COMPANY_NOT_ALLOWED",
-    "message": "Company \"Unknown Co\" is not allowed for this employee",
-    "details": {
-      "allowed": ["Logistics Co", "Security Ltd"]
-    }
-  }
-}
-```
-
-### Possible Error Codes for Time Entry Creation
-
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `MISSING_FIELDS` | 400 | One or more required fields missing |
-| `INVALID_DATE` | 400 | `work_date` not in YYYY-MM-DD format |
-| `INVALID_TIME` | 400 | `start_time` or `end_time` not in HH:MM format |
-| `INVALID_DURATION` | 400 | Duration is 0 minutes |
-| `DURATION_TOO_LONG` | 400 | Duration exceeds 16 hours |
-| `EMPLOYEE_NOT_FOUND` | 404 | Employee ID does not exist |
-| `COMPANY_NOT_ALLOWED` | 400 | Employee not authorized for this company |
-| `ROLE_NOT_ALLOWED` | 400 | Employee not authorized for this role |
-| `RATE_NOT_FOUND` | 404 | No hourly rate defined for this employee+company+role |
-| `OVERLAP` | 400 | New entry overlaps with an existing time entry (same-day or cross-day overnight) |
-
----
-
-### 7. Get Time Entries for a Day
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/time-entries` |
-| **Method** | `GET` |
-| **Purpose** | Retrieve all time entries for a specific employee on a specific date. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employee_id` | Query | Yes | string | Employee identifier |
-| `work_date` | Query | Yes | string | Date in `YYYY-MM-DD` format |
-
-**Example Request:**
-
-```
-GET /api/time-entries?employee_id=EMP-001&work_date=2025-01-15
-```
-
-**Success Response (200 OK):**
-
-```json
-[
-  {
-    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-    "work_date": "2025-01-15",
-    "employee_id": "EMP-001",
-    "company_name": "Logistics Co",
-    "role_name": "Warehouse Worker",
-    "start_time": "08:00",
-    "end_time": "16:00",
-    "created_at": "2025-01-15T08:00:00.000Z"
-  }
-]
-```
-
-**Error Response — Missing Parameters (400):**
-
-```json
-{
-  "error": {
-    "code": "MISSING_PARAMS",
-    "message": "Query params employee_id and work_date are required"
-  }
-}
-```
-
----
-
-### 8. Update Time Entry
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/time-entries/:id` |
-| **Method** | `PUT` |
-| **Purpose** | Update an existing time entry. Re-validates all business rules (overlap, authorization, rate). |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `id` | URL Path | Yes | string (UUID) | The time entry ID |
-| `work_date` | Body | No | string | Updated date |
-| `company_name` | Body | No | string | Updated company |
-| `role_name` | Body | No | string | Updated role |
-| `start_time` | Body | No | string | Updated start time |
-| `end_time` | Body | No | string | Updated end time |
-
-At least one body field must be provided.
-
-**Example Request:**
-
-```json
-PUT /api/time-entries/f47ac10b-58cc-4372-a567-0e02b2c3d479
-{
-  "end_time": "17:00"
-}
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "work_date": "2025-01-15",
-  "employee_id": "EMP-001",
-  "company_name": "Logistics Co",
-  "role_name": "Warehouse Worker",
-  "start_time": "08:00",
-  "end_time": "17:00",
-  "created_at": "2025-01-15T08:00:00.000Z"
-}
-```
-
-**Error Response — Entry Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "ENTRY_NOT_FOUND",
-    "message": "Time entry \"invalid-uuid\" not found"
-  }
-}
-```
-
----
-
-### 9. Delete Time Entry
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/time-entries/:id` |
-| **Method** | `DELETE` |
-| **Purpose** | Delete a specific time entry. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `id` | URL Path | Yes | string (UUID) | The time entry ID |
-
-**Example Request:**
-
-```
-DELETE /api/time-entries/f47ac10b-58cc-4372-a567-0e02b2c3d479
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "success": true
-}
-```
-
-**Error Response — Entry Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "ENTRY_NOT_FOUND",
-    "message": "Time entry \"invalid-uuid\" not found"
-  }
-}
-```
-
----
-
-## Payroll Endpoint
-
-### 10. Get Daily Payroll Analysis
-
-*(Detailed above in Bonus 1)*
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/payroll/daily` |
-| **Method** | `GET` |
-| **Purpose** | Calculate complete daily payroll for an employee. |
-
----
-
-## Admin Endpoints
-
-### 11. Upload Excel File
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/upload` |
-| **Method** | `POST` |
-| **Content-Type** | `multipart/form-data` |
-| **Purpose** | Bulk import employees, rates, and time entries from an .xlsx file. Uses upsert logic with overlap detection. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `file` | Form Data | Yes | .xlsx file | Excel file with sheets: employees, rates, time_entries |
-
-**Example Request (curl):**
-
-```bash
-curl -X POST https://eztime-demo.onrender.com/api/admin/upload \
-  -F "file=@data.xlsx"
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "success": true,
-  "summary": {
-    "employees": { "inserted": 3, "updated": 1, "skipped": 0 },
-    "rates": { "inserted": 5, "updated": 2, "skipped": 0 },
-    "timeEntries": { "inserted": 20, "duplicates": 3, "skipped": 1 },
-    "warnings": [
-      "Entry skipped – employee \"EMP-999\" not found",
-      "Entry skipped – overlap: EMP-001 on 2025-01-15 (01:00–05:00)"
-    ]
-  }
-}
-```
-
-**Error Response — No File (400):**
-
-```json
-{
-  "error": {
-    "code": "NO_FILE",
-    "message": "No file uploaded. Send a .xlsx file as \"file\" field."
-  }
-}
-```
-
----
-
-### 12. Dashboard KPIs
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/dashboard` |
-| **Method** | `GET` |
-| **Purpose** | Retrieve aggregate KPIs: employee count, total entries, total hours, hours per employee, and entries by company. |
-
-**Parameters:** None
-
-**Success Response (200 OK):**
-
-```json
-{
-  "employeeCount": 5,
-  "totalEntries": 120,
-  "totalHoursWorked": 854.5,
-  "uniqueDays": 22,
-  "entriesPerDay": [
-    { "work_date": "2025-01-15", "entry_count": 8, "employee_count": 4 }
-  ],
-  "hoursPerEmployee": [
-    {
-      "employee_id": "EMP-001",
-      "full_name": "Alice Johnson",
-      "entry_count": 30,
-      "days_worked": 20,
-      "total_hours": 175.5
-    }
-  ],
-  "entriesByCompany": [
-    { "company_name": "Logistics Co", "entry_count": 60, "employee_count": 3 }
-  ]
-}
-```
-
----
-
-### 13. List Employees (Admin)
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/employees` |
-| **Method** | `GET` |
-| **Purpose** | List all employees with their time entry counts. |
-
-**Parameters:** None
-
-**Success Response (200 OK):**
-
-```json
-[
-  {
-    "employee_id": "EMP-001",
-    "full_name": "Alice Johnson",
-    "status": "active",
-    "standard_daily_quota": 8,
-    "entry_count": 30
-  }
-]
-```
-
----
-
-### 14. List Time Entries (Admin, Paginated)
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/time-entries` |
-| **Method** | `GET` |
-| **Purpose** | Retrieve paginated time entries with employee names. Optionally filter by employee. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employee_id` | Query | No | string | Filter by employee |
-| `page` | Query | No | number | Page number (default: 1) |
-| `limit` | Query | No | number | Entries per page (default: 50, max: 100) |
-
-**Example Request:**
-
-```
-GET /api/admin/time-entries?employee_id=EMP-001&page=1&limit=25
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "entries": [
-    {
-      "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-      "work_date": "2025-01-15",
-      "employee_id": "EMP-001",
-      "company_name": "Logistics Co",
-      "role_name": "Warehouse Worker",
-      "start_time": "08:00",
-      "end_time": "16:00",
-      "created_at": "2025-01-15T08:00:00.000Z",
-      "employee_name": "Alice Johnson"
-    }
-  ],
-  "total": 30,
-  "page": 1,
-  "limit": 25
-}
-```
-
----
-
-### 15. List Rates
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/rates` |
-| **Method** | `GET` |
-| **Purpose** | List all hourly rates. Optionally filter by employee. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employee_id` | Query | No | string | Filter rates for a specific employee |
-
-**Example Request:**
-
-```
-GET /api/admin/rates?employee_id=EMP-001
-```
-
-**Success Response (200 OK):**
-
-```json
-[
-  {
-    "employee_id": "EMP-001",
-    "company_name": "Logistics Co",
-    "role_name": "Warehouse Worker",
-    "hourly_rate": 50
-  },
-  {
-    "employee_id": "EMP-001",
-    "company_name": "Security Ltd",
-    "role_name": "Guard",
-    "hourly_rate": 80
-  }
-]
-```
-
----
-
-### 16. Create Rate
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/rates` |
-| **Method** | `POST` |
-| **Purpose** | Create a new hourly rate for an employee+company+role combination. |
-
-**Request Body:**
-
-| Parameter | Required | Type | Description |
-|-----------|----------|------|-------------|
-| `employee_id` | Yes | string | Employee identifier |
-| `company_name` | Yes | string | Company name |
-| `role_name` | Yes | string | Role name |
-| `hourly_rate` | Yes | number | Hourly rate (must be > 0) |
-
-**Example Request:**
-
-```json
-POST /api/admin/rates
-{
-  "employee_id": "EMP-001",
-  "company_name": "Tech Corp",
-  "role_name": "Developer",
-  "hourly_rate": 120
-}
-```
-
-**Success Response (201 Created):**
-
-```json
-{
-  "employee_id": "EMP-001",
-  "company_name": "Tech Corp",
-  "role_name": "Developer",
-  "hourly_rate": 120
-}
-```
-
-**Error Response — Rate Already Exists (409):**
-
-```json
-{
-  "error": {
-    "code": "RATE_EXISTS",
-    "message": "Rate already exists for this employee/company/role combination"
-  }
-}
-```
-
-**Error Response — Invalid Rate (400):**
-
-```json
-{
-  "error": {
-    "code": "INVALID_RATE",
-    "message": "hourly_rate must be a positive number"
-  }
-}
-```
-
----
-
-### 17. Update Rate
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/rates` |
-| **Method** | `PUT` |
-| **Purpose** | Update the hourly rate for an existing employee+company+role combination. |
-
-**Request Body:**
-
-| Parameter | Required | Type | Description |
-|-----------|----------|------|-------------|
-| `employee_id` | Yes | string | Employee identifier |
-| `company_name` | Yes | string | Company name |
-| `role_name` | Yes | string | Role name |
-| `hourly_rate` | Yes | number | New hourly rate (must be > 0) |
-
-**Example Request:**
-
-```json
-PUT /api/admin/rates
-{
-  "employee_id": "EMP-001",
-  "company_name": "Tech Corp",
-  "role_name": "Developer",
-  "hourly_rate": 130
-}
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "employee_id": "EMP-001",
-  "company_name": "Tech Corp",
-  "role_name": "Developer",
-  "hourly_rate": 130
-}
-```
-
-**Error Response — Rate Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "RATE_NOT_FOUND",
-    "message": "Rate not found"
-  }
-}
-```
-
----
-
-### 18. Delete Rate
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/rates` |
-| **Method** | `DELETE` |
-| **Purpose** | Delete an hourly rate for an employee+company+role combination. |
-
-**Request Body:**
-
-| Parameter | Required | Type | Description |
-|-----------|----------|------|-------------|
-| `employee_id` | Yes | string | Employee identifier |
-| `company_name` | Yes | string | Company name |
-| `role_name` | Yes | string | Role name |
-
-**Example Request:**
-
-```json
-DELETE /api/admin/rates
-{
-  "employee_id": "EMP-001",
-  "company_name": "Tech Corp",
-  "role_name": "Developer"
-}
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "success": true
-}
-```
-
-**Error Response — Rate Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "RATE_NOT_FOUND",
-    "message": "Rate not found"
-  }
-}
-```
-
----
-
-### 19. Data Insights
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/insights` |
-| **Method** | `GET` |
-| **Purpose** | Retrieve analytics with flexible filtering: summary KPIs, breakdowns by employee, company, role, date, and company+role. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employee_id` | Query | No | string | Filter by employee |
-| `company_name` | Query | No | string | Filter by company |
-| `role_name` | Query | No | string | Filter by role |
-| `date_from` | Query | No | string | Start date (YYYY-MM-DD) |
-| `date_to` | Query | No | string | End date (YYYY-MM-DD) |
-
-**Example Request:**
-
-```
-GET /api/admin/insights?company_name=Logistics%20Co&date_from=2025-01-01&date_to=2025-01-31
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "filters": {
-    "company_name": "Logistics Co",
-    "date_from": "2025-01-01",
-    "date_to": "2025-01-31"
-  },
-  "availableCompanies": ["Logistics Co", "Security Ltd", "Tech Corp"],
-  "availableRoles": ["Guard", "Warehouse Worker", "Driver"],
-  "summary": {
-    "totalEntries": 45,
-    "totalHours": 340.5,
-    "uniqueDays": 20,
-    "uniqueEmployees": 3,
-    "uniqueCompanies": 1,
-    "avgHoursPerDay": 17.03
-  },
-  "byEmployee": [
-    {
-      "employee_id": "EMP-001",
-      "full_name": "Alice Johnson",
-      "total_hours": 160.5,
-      "entry_count": 20,
-      "days_worked": 20
-    }
-  ],
-  "byCompany": [
-    {
-      "company_name": "Logistics Co",
-      "total_hours": 340.5,
-      "entry_count": 45,
-      "employee_count": 3
-    }
-  ],
-  "byRole": [
-    {
-      "role_name": "Warehouse Worker",
-      "total_hours": 200,
-      "entry_count": 25
-    }
-  ],
-  "byDate": [
-    {
-      "work_date": "2025-01-15",
-      "total_hours": 24.5,
-      "entry_count": 3
-    }
-  ],
-  "byCompanyRole": [
-    {
-      "company_name": "Logistics Co",
-      "role_name": "Warehouse Worker",
-      "total_hours": 200,
-      "entry_count": 25
-    }
-  ]
-}
-```
-
----
-
-### 20. Monthly Payroll Report (JSON)
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/payroll-report` |
-| **Method** | `GET` |
-| **Purpose** | Generate a monthly payroll report for a specific employee. Returns daily breakdown with overtime tiers and monthly totals. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employee_id` | Query | Yes | string | Employee identifier |
-| `month` | Query | Yes | string | Month in `YYYY-MM` format |
-
-**Example Request:**
-
-```
-GET /api/admin/payroll-report?employee_id=EMP-001&month=2025-01
-```
-
-**Success Response (200 OK):**
-
-```json
-{
-  "employee": {
-    "employee_id": "EMP-001",
-    "full_name": "Alice Johnson",
-    "status": "active",
-    "standard_daily_quota": 8
-  },
-  "month": "2025-01",
-  "days": [
-    {
-      "work_date": "2025-01-15",
-      "total_hours": 10.5,
-      "standard_daily_quota": 8,
-      "daily_deficit_hours": 0,
-      "hours_100": 8,
-      "hours_125": 2,
-      "hours_150": 0.5,
-      "applied_hourly_rate": 80,
-      "gross_daily_salary": 900,
-      "night_minutes": 0
-    }
-  ],
-  "monthly": {
-    "total_hours": 175.5,
-    "total_deficit": 4.5,
-    "total_salary": 15200,
-    "total_hours_100": 160,
-    "total_hours_125": 12,
-    "total_hours_150": 3.5,
-    "work_days": 22
-  }
-}
-```
-
-**Error Response — Missing Parameters (400):**
-
-```json
-{
-  "error": {
-    "code": "MISSING_PARAMS",
-    "message": "employee_id and month (YYYY-MM) are required"
-  }
-}
-```
-
-**Error Response — Invalid Month Format (400):**
-
-```json
-{
-  "error": {
-    "code": "INVALID_MONTH",
-    "message": "month must be YYYY-MM format"
-  }
-}
-```
-
-**Error Response — Employee Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "EMPLOYEE_NOT_FOUND",
-    "message": "Employee \"EMP-999\" not found"
-  }
-}
-```
-
----
-
-### 21. Monthly Payroll Report (Excel Download)
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/payroll-report/export` |
-| **Method** | `GET` |
-| **Purpose** | Download the monthly payroll report as a formatted .xlsx file. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `employee_id` | Query | Yes | string | Employee identifier |
-| `month` | Query | Yes | string | Month in `YYYY-MM` format |
-
-**Example Request:**
-
-```
-GET /api/admin/payroll-report/export?employee_id=EMP-001&month=2025-01
-```
-
-**Success Response (200 OK):**
-
-Returns a binary `.xlsx` file download with headers:
-- `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
-- `Content-Disposition: attachment; filename="payroll_EMP-001_2025-01.xlsx"`
-
-The worksheet contains:
-- Title row with employee name and month
-- Daily breakdown table (Date, Hours, Quota, Deficit, 100%/125%/150%, Rate, Pay, Night Min)
-- Totals row with monthly aggregates
-
-**Error Response — Employee Not Found (404):**
-
-```json
-{
-  "error": {
-    "code": "EMPLOYEE_NOT_FOUND",
-    "message": "Employee \"EMP-999\" not found"
-  }
-}
-```
-
----
-
-### 22. Export All Employees Payroll (Excel Download)
-
-| Field | Value |
-|-------|-------|
-| **URL** | `/api/admin/payroll-report/export-all` |
-| **Method** | `GET` |
-| **Purpose** | Download a multi-sheet Excel workbook containing payroll reports for all active employees in a given month. |
-
-**Parameters:**
-
-| Parameter | Location | Required | Type | Description |
-|-----------|----------|----------|------|-------------|
-| `month` | Query | Yes | string | Month in `YYYY-MM` format |
-
-**Example Request:**
-
-```
-GET /api/admin/payroll-report/export-all?month=2025-01
-```
-
-**Success Response (200 OK):**
-
-Returns a binary `.xlsx` file download with headers:
-- `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
-- `Content-Disposition: attachment; filename="payroll_all_employees_2025-01.xlsx"`
-
-The workbook contains:
-- **Summary sheet** — All employees' monthly totals (ID, Name, Work Days, Total Hours, Deficit, Tier Hours, Salary)
-- **Per-employee sheets** — One sheet per employee with their daily breakdown
-
-**Error Response — Missing Parameters (400):**
-
-```json
-{
-  "error": {
-    "code": "MISSING_PARAMS",
-    "message": "month (YYYY-MM) is required"
-  }
-}
-```
-
-**Error Response — No Active Employees (404):**
-
-```json
-{
-  "error": {
-    "code": "NO_EMPLOYEES",
-    "message": "No active employees found"
-  }
-}
-```
-
----
-
-## All Endpoints Summary
+## All Endpoints
 
 | # | Method | Endpoint | Purpose |
 |---|--------|----------|---------|
@@ -1652,7 +393,7 @@ The workbook contains:
 | 4 | `PUT` | `/api/employees/:id` | Update employee details |
 | 5 | `DELETE` | `/api/employees/:id` | Delete employee (cascade) |
 | 6 | `POST` | `/api/time-entries` | Create time entry (validated) |
-| 7 | `GET` | `/api/time-entries?employee_id=...&work_date=...` | Get day's time entries |
+| 7 | `GET` | `/api/time-entries?employee_id=...&work_date=...` | Get day's entries |
 | 8 | `PUT` | `/api/time-entries/:id` | Update time entry |
 | 9 | `DELETE` | `/api/time-entries/:id` | Delete time entry |
 | 10 | `GET` | `/api/payroll/daily?employee_id=...&work_date=...` | Daily payroll analysis |
@@ -1668,6 +409,130 @@ The workbook contains:
 | 20 | `GET` | `/api/admin/payroll-report?employee_id=...&month=...` | Monthly payroll (JSON) |
 | 21 | `GET` | `/api/admin/payroll-report/export?employee_id=...&month=...` | Monthly payroll (Excel) |
 | 22 | `GET` | `/api/admin/payroll-report/export-all?month=...` | All employees payroll (Excel) |
+
+---
+
+## Working Examples
+
+### 1. List employees
+
+```bash
+curl https://eztime-demo.onrender.com/api/employees
+```
+
+### 2. Get employee options (allowed companies & roles)
+
+```bash
+curl "https://eztime-demo.onrender.com/api/employees/E1001/options"
+```
+
+Response:
+```json
+{ "allowed_companies": ["חברת בת ב", "חברת בת ד", "חברת בת ה"], "allowed_roles": ["מחסנאי", "נציג שירות", "קופאי"] }
+```
+
+### 3. Create a time entry
+
+```bash
+curl -X POST https://eztime-demo.onrender.com/api/time-entries \
+  -H "Content-Type: application/json" \
+  -d '{"employee_id":"E1001","work_date":"2026-06-01","company_name":"חברת בת ב","role_name":"מחסנאי","start_time":"08:00","end_time":"16:00"}'
+```
+
+Validations: employee exists, company/role authorized, rate exists, no overlapping shifts, duration 0–16h.
+
+### 4. Get entries for a day
+
+```bash
+curl "https://eztime-demo.onrender.com/api/time-entries?employee_id=E1001&work_date=2026-02-08"
+```
+
+### 5. Daily payroll calculation (see Bonus 1 above for full response)
+
+```bash
+curl "https://eztime-demo.onrender.com/api/payroll/daily?employee_id=E1001&work_date=2026-02-08"
+```
+
+### 6. Admin dashboard KPIs
+
+```bash
+curl https://eztime-demo.onrender.com/api/admin/dashboard
+```
+
+### 7. Data insights with filters
+
+```bash
+curl "https://eztime-demo.onrender.com/api/admin/insights?employee_id=E1001"
+```
+
+### 8. Monthly payroll report
+
+```bash
+curl "https://eztime-demo.onrender.com/api/admin/payroll-report?employee_id=E1001&month=2026-02"
+```
+
+### 9. List rates for an employee
+
+```bash
+curl "https://eztime-demo.onrender.com/api/admin/rates?employee_id=E1001"
+```
+
+### 10. Upload Excel file
+
+```bash
+curl -X POST https://eztime-demo.onrender.com/api/admin/upload \
+  -F "file=@EZTIME_DATA.xlsx"
+```
+
+### 11. Download payroll Excel (single employee)
+
+Open in browser or use curl:
+```bash
+curl -o payroll.xlsx "https://eztime-demo.onrender.com/api/admin/payroll-report/export?employee_id=E1001&month=2026-02"
+```
+
+### 12. Download payroll Excel (all employees)
+
+```bash
+curl -o payroll_all.xlsx "https://eztime-demo.onrender.com/api/admin/payroll-report/export-all?month=2026-02"
+```
+
+---
+
+## Error Handling
+
+All errors follow a consistent JSON structure:
+
+```json
+{ "error": { "code": "ERROR_CODE", "message": "Human-readable description", "details": {} } }
+```
+
+### Error Codes Reference
+
+| Code | Status | Description |
+|------|--------|-------------|
+| `MISSING_FIELDS` | 400 | Required fields not provided |
+| `MISSING_PARAMS` | 400 | Required query params not provided |
+| `INVALID_DATE` | 400 | Date not in YYYY-MM-DD format |
+| `INVALID_TIME` | 400 | Time not in HH:MM format |
+| `INVALID_DURATION` | 400 | Duration is 0 minutes |
+| `DURATION_TOO_LONG` | 400 | Duration exceeds 16 hours |
+| `EMPLOYEE_NOT_FOUND` | 404 | Employee ID doesn't exist |
+| `ENTRY_NOT_FOUND` | 404 | Time entry UUID doesn't exist |
+| `RATE_NOT_FOUND` | 404 | No rate for employee+company+role |
+| `COMPANY_NOT_ALLOWED` | 400 | Employee not authorized for company |
+| `ROLE_NOT_ALLOWED` | 400 | Employee not authorized for role |
+| `OVERLAP` | 400 | Shift overlaps existing entry (same-day or cross-day overnight) |
+| `EMPLOYEE_EXISTS` | 409 | Employee ID already exists |
+| `RATE_EXISTS` | 409 | Rate combo already exists |
+| `NO_FILE` | 400 | No file uploaded |
+| `EXPORT_FAILED` | 500 | Excel generation failed |
+
+---
+
+## Postman Screenshots
+
+*Screenshots will be added showing the key API flows tested in Postman.*
 
 ---
 
