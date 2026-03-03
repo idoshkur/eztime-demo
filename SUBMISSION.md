@@ -263,13 +263,16 @@ The admin panel provides full management capabilities:
 ### Data Validation & Integrity
 
 The system enforces data accuracy at multiple levels:
-- **Overlapping shift detection** — prevents creating time entries that overlap with existing entries for the same employee on the same day (e.g., "08:00–12:00 overlaps with 10:00–14:00")
+- **Overlapping shift detection** — prevents creating time entries that overlap with existing entries for the same employee, including **cross-day overlap detection** for overnight shifts (e.g., a Sunday 22:00–06:00 shift blocks Monday 01:00–05:00)
+- **Overlap validation in bulk upload** — Excel imports run the same overlap detection (same-day + cross-day) per entry; overlapping entries are skipped with a warning
+- **Atomic operations** — time entry creation and updates wrap validation + write in a database transaction, preventing race conditions on concurrent requests
 - **Company/role authorization** — an employee can only clock into companies and roles they are assigned to
-- **Rate verification** — a time entry can only be created if a rate exists for that employee+company+role combination
+- **Rate verification** — a time entry can only be created if a rate exists for that employee+company+role combination; payroll warns when rates are missing instead of silently returning zero salary
 - **Time format validation** — enforces HH:MM format, valid ranges, duration > 0, max 16 hours
+- **Overnight shift support** — shifts crossing midnight (e.g., 22:00–06:00) are fully supported: correct duration calculation, night minutes split across evening/morning windows, and proper overtime threshold adjustment
 - **Duplicate prevention** — employee IDs must be unique; Excel upload skips duplicate time entries
 - **Client-side warnings** — immediate feedback when start time equals end time
-- **Consistent error handling** — all "not found" scenarios return HTTP 404 with a standard JSON error structure
+- **Consistent error handling** — all "not found" scenarios return HTTP 404 with a standard JSON error structure; Excel export failures return clean 500 responses
 
 ---
 
@@ -368,9 +371,12 @@ GET /api/payroll/daily?employee_id=EMP-001&work_date=2025-01-15
       "hours": 2,
       "entry_count": 1
     }
-  ]
+  ],
+  "warnings": []
 }
 ```
+
+> **Note:** The `warnings` array is present when issues are detected — for example, if a rate is missing for an entry: `"No hourly rate found for: Security Ltd/Guard — salary may be incorrect"`.
 
 ### Response Field Descriptions
 
@@ -779,6 +785,18 @@ POST /api/time-entries
 }
 ```
 
+**Error Response — Cross-Day Overlap (400):**
+An overnight shift on the previous day blocks early-morning entries on the next day:
+
+```json
+{
+  "error": {
+    "code": "OVERLAP",
+    "message": "This entry (01:00–05:00) overlaps with an overnight entry (22:00–06:00) from 2025-01-14"
+  }
+}
+```
+
 **Error Response — Company Not Allowed (400):**
 
 ```json
@@ -806,7 +824,7 @@ POST /api/time-entries
 | `COMPANY_NOT_ALLOWED` | 400 | Employee not authorized for this company |
 | `ROLE_NOT_ALLOWED` | 400 | Employee not authorized for this role |
 | `RATE_NOT_FOUND` | 404 | No hourly rate defined for this employee+company+role |
-| `OVERLAP` | 400 | New entry overlaps with an existing time entry |
+| `OVERLAP` | 400 | New entry overlaps with an existing time entry (same-day or cross-day overnight) |
 
 ---
 
@@ -983,7 +1001,7 @@ DELETE /api/time-entries/f47ac10b-58cc-4372-a567-0e02b2c3d479
 | **URL** | `/api/admin/upload` |
 | **Method** | `POST` |
 | **Content-Type** | `multipart/form-data` |
-| **Purpose** | Bulk import employees, rates, and time entries from an .xlsx file. Uses upsert logic. |
+| **Purpose** | Bulk import employees, rates, and time entries from an .xlsx file. Uses upsert logic with overlap detection. |
 
 **Parameters:**
 
@@ -1007,7 +1025,10 @@ curl -X POST https://eztime-demo.onrender.com/api/admin/upload \
     "employees": { "inserted": 3, "updated": 1, "skipped": 0 },
     "rates": { "inserted": 5, "updated": 2, "skipped": 0 },
     "timeEntries": { "inserted": 20, "duplicates": 3, "skipped": 1 },
-    "warnings": ["Row 5 in time_entries: employee EMP-999 not found, skipping"]
+    "warnings": [
+      "Entry skipped – employee \"EMP-999\" not found",
+      "Entry skipped – overlap: EMP-001 on 2025-01-15 (01:00–05:00)"
+    ]
   }
 }
 ```
@@ -1725,12 +1746,12 @@ eztime-demo/
 │   │   ├── db/schema.ts          — Table creation (DDL)
 │   │   ├── routes/
 │   │   │   ├── employees.ts      — Employee CRUD + allowed companies/roles
-│   │   │   ├── timeEntries.ts    — Time entry CRUD + validation + overlap detection
+│   │   │   ├── timeEntries.ts    — Time entry CRUD + validation + overlap detection (same-day + cross-day)
 │   │   │   ├── payroll.ts        — Daily payroll calculation endpoint
 │   │   │   └── admin.ts          — Upload, dashboard, insights, rates, payroll report
 │   │   ├── services/
 │   │   │   ├── payrollService.ts  — Core payroll calculation engine
-│   │   │   └── adminUploadService.ts — Excel import with upsert logic
+│   │   │   └── adminUploadService.ts — Excel import with upsert + overlap validation
 │   │   └── utils/
 │   │       └── excelParser.ts     — Excel file parsing (employees, rates, entries)
 │   └── package.json
@@ -1757,7 +1778,7 @@ eztime-demo/
 
 1. **Single deployment** — Backend serves the frontend as static files, simplifying deployment to a single Render service with one URL.
 2. **Cloud database (Turso)** — Avoids the need for SQLite file storage on an ephemeral free-tier server. Data persists independently of deployments.
-3. **Validation at the API layer** — All business rules (overlap detection, authorization, rate checks) are enforced server-side. The frontend provides UX hints but the backend is the source of truth.
+3. **Validation at the API layer** — All business rules (overlap detection including cross-day overnight shifts, authorization, rate checks) are enforced server-side within atomic transactions. The frontend provides UX hints but the backend is the source of truth.
 4. **Reusable payroll engine** — `calculateDailyPayroll()` is called by both the employee-facing daily view and the admin monthly payroll report, ensuring consistent calculations everywhere.
 5. **Excel round-trip** — The same `xlsx` library handles both import (upload) and export (payroll report download), keeping the data format consistent.
 6. **Consistent error handling** — All API errors use the same `{ error: { code, message } }` structure. Resource-not-found scenarios consistently return HTTP 404.

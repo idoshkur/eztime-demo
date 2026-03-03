@@ -215,3 +215,5 @@ Returns ordered list of entries for that employee/day.
 | Company in allowed list | `COMPANY_NOT_ALLOWED` |
 | Role in allowed list | `ROLE_NOT_ALLOWED` |
 | Rate exists | `RATE_NOT_FOUND` |
+| No overlap (same day) | `OVERLAP` |
+| No overlap (cross-day overnight) | `OVERLAP` |
