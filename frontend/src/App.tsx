@@ -118,7 +118,7 @@ export default function App() {
 
                 {selectedEmployee && selectedDate && (
                   <>
-                    <DayEntriesTable entries={entries} />
+                    <DayEntriesTable entries={entries} date={selectedDate} />
                     <PayrollSummary payroll={payroll} />
 
                     {payroll && payroll.total_hours > 0 && (

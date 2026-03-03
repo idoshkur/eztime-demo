@@ -2,6 +2,7 @@ import { TimeEntry } from '../api/client';
 
 interface Props {
   entries: TimeEntry[];
+  date?: string;
 }
 
 function formatDuration(start: string, end: string): string {
@@ -16,10 +17,16 @@ function formatDuration(start: string, end: string): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
-export default function DayEntriesTable({ entries }: Props) {
+export default function DayEntriesTable({ entries, date }: Props) {
+  const isToday = date === new Date().toISOString().split('T')[0];
+  const dateLabel = isToday ? 'Today' : date ?? '';
+
   return (
     <section className="card">
-      <h2>Day Entries{entries.length > 0 ? ` (${entries.length})` : ''}</h2>
+      <h2>
+        {dateLabel ? `${dateLabel}'s Entries` : 'Day Entries'}
+        {entries.length > 0 ? ` (${entries.length})` : ''}
+      </h2>
       {entries.length === 0 ? (
         <p className="empty-state">No entries recorded for this day.</p>
       ) : (
