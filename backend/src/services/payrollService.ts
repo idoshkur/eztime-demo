@@ -69,25 +69,29 @@ function calculateNightMinutes(entries: TimeEntry[]): number {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export function calculateDailyPayroll(
+export async function calculateDailyPayroll(
   employeeId: string,
   workDate: string,
-): DailyPayroll | null {
+): Promise<DailyPayroll | null> {
   const db = getDb();
 
   // Fetch employee
-  const employee = db
-    .prepare('SELECT * FROM employees WHERE employee_id = ?')
-    .get(employeeId) as { employee_id: string; full_name: string; status: string; standard_daily_quota: number } | undefined;
+  const empResult = await db.execute({
+    sql: 'SELECT * FROM employees WHERE employee_id = ?',
+    args: [employeeId],
+  });
+  const employee = empResult.rows[0] as unknown as
+    | { employee_id: string; full_name: string; status: string; standard_daily_quota: number }
+    | undefined;
 
   if (!employee) return null;
 
   // Fetch time entries for the day (ordered by start time)
-  const entries = db
-    .prepare(
-      'SELECT * FROM time_entries WHERE employee_id = ? AND work_date = ? ORDER BY start_time',
-    )
-    .all(employeeId, workDate) as TimeEntry[];
+  const entriesResult = await db.execute({
+    sql: 'SELECT * FROM time_entries WHERE employee_id = ? AND work_date = ? ORDER BY start_time',
+    args: [employeeId, workDate],
+  });
+  const entries = entriesResult.rows as unknown as TimeEntry[];
 
   // Empty day – return zeroed structure
   if (entries.length === 0) {
@@ -127,14 +131,13 @@ export function calculateDailyPayroll(
   const hours150 = Math.max(totalHours - 10, 0);
 
   // 6.4 – Applied hourly rate (MAX across all entries)
-  const getRateStmt = db.prepare(
-    'SELECT hourly_rate FROM rates WHERE employee_id = ? AND site_name = ? AND role_name = ?',
-  );
   let appliedHourlyRate = 0;
   for (const e of entries) {
-    const row = getRateStmt.get(e.employee_id, e.site_name, e.role_name) as
-      | { hourly_rate: number }
-      | undefined;
+    const rateResult = await db.execute({
+      sql: 'SELECT hourly_rate FROM rates WHERE employee_id = ? AND company_name = ? AND role_name = ?',
+      args: [e.employee_id, e.company_name, e.role_name],
+    });
+    const row = rateResult.rows[0] as unknown as { hourly_rate: number } | undefined;
     if (row && row.hourly_rate > appliedHourlyRate) {
       appliedHourlyRate = row.hourly_rate;
     }
@@ -149,13 +152,13 @@ export function calculateDailyPayroll(
   // 6.6 – Daily deficit
   const dailyDeficitHours = Math.max(employee.standard_daily_quota - totalHours, 0);
 
-  // 6.7 – Breakdown by (site_name, role_name)
+  // 6.7 – Breakdown by (company_name, role_name)
   const breakdownMap = new Map<
     string,
-    { site_name: string; role_name: string; minutes: number; entry_count: number }
+    { company_name: string; role_name: string; minutes: number; entry_count: number }
   >();
   for (const e of entries) {
-    const key = `${e.site_name}\x00${e.role_name}`;
+    const key = `${e.company_name}\x00${e.role_name}`;
     const dur = entryDuration(e.start_time, e.end_time);
     const cur = breakdownMap.get(key);
     if (cur) {
@@ -163,19 +166,19 @@ export function calculateDailyPayroll(
       cur.entry_count += 1;
     } else {
       breakdownMap.set(key, {
-        site_name:   e.site_name,
-        role_name:   e.role_name,
-        minutes:     dur,
-        entry_count: 1,
+        company_name: e.company_name,
+        role_name:    e.role_name,
+        minutes:      dur,
+        entry_count:  1,
       });
     }
   }
   const breakdownBySiteRole = Array.from(breakdownMap.values()).map((b) => ({
-    site_name:   b.site_name,
-    role_name:   b.role_name,
-    minutes:     b.minutes,
-    hours:       b.minutes / 60,
-    entry_count: b.entry_count,
+    company_name: b.company_name,
+    role_name:    b.role_name,
+    minutes:      b.minutes,
+    hours:        b.minutes / 60,
+    entry_count:  b.entry_count,
   }));
 
   return {

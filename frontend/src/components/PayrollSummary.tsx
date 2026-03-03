@@ -1,4 +1,3 @@
-import React from 'react';
 import { DailyPayroll } from '../api/client';
 
 interface Props {
@@ -105,15 +104,15 @@ export default function PayrollSummary({ payroll }: Props) {
           </div>
         )}
 
-        {/* Site + Role breakdown */}
+        {/* Company + Role breakdown */}
         {payroll.breakdown_by_site_role.length > 0 && (
           <div className="summary-section">
-            <h3>Breakdown by Site &amp; Role</h3>
+            <h3>Breakdown by Company &amp; Role</h3>
             <div className="table-wrapper">
               <table>
                 <thead>
                   <tr>
-                    <th>Site</th>
+                    <th>Company</th>
                     <th>Role</th>
                     <th>Hours</th>
                     <th>Minutes</th>
@@ -123,7 +122,7 @@ export default function PayrollSummary({ payroll }: Props) {
                 <tbody>
                   {payroll.breakdown_by_site_role.map((b, i) => (
                     <tr key={i}>
-                      <td>{b.site_name}</td>
+                      <td>{b.company_name}</td>
                       <td>{b.role_name}</td>
                       <td className="mono">{fmt(b.hours)}</td>
                       <td className="mono">{b.minutes}</td>

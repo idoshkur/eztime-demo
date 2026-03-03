@@ -1,23 +1,23 @@
-import Database from 'better-sqlite3';
+import { createClient, Client } from '@libsql/client';
+import dotenv from 'dotenv';
 import path from 'path';
-import fs from 'fs';
 
-const DB_DIR = path.join(__dirname, '../../data');
-const DB_PATH = path.join(DB_DIR, 'eztime.db');
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
-}
+let _client: Client | null = null;
 
-let _db: Database.Database | null = null;
+export function getDb(): Client {
+  if (!_client) {
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
 
-export function getDb(): Database.Database {
-  if (!_db) {
-    _db = new Database(DB_PATH);
-    _db.pragma('journal_mode = WAL');
-    _db.pragma('foreign_keys = ON');
+    if (!url) {
+      throw new Error('TURSO_DATABASE_URL environment variable is required');
+    }
+
+    _client = createClient({ url, authToken });
   }
-  return _db;
+  return _client;
 }
 
 export default getDb;

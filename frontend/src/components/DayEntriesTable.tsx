@@ -1,4 +1,3 @@
-import React from 'react';
 import { TimeEntry } from '../api/client';
 
 interface Props {
@@ -29,7 +28,7 @@ export default function DayEntriesTable({ entries }: Props) {
             <thead>
               <tr>
                 <th>#</th>
-                <th>Site</th>
+                <th>Company</th>
                 <th>Role</th>
                 <th>Start</th>
                 <th>End</th>
@@ -40,7 +39,7 @@ export default function DayEntriesTable({ entries }: Props) {
               {entries.map((entry, idx) => (
                 <tr key={entry.id}>
                   <td className="muted">{idx + 1}</td>
-                  <td>{entry.site_name}</td>
+                  <td>{entry.company_name}</td>
                   <td>{entry.role_name}</td>
                   <td className="mono">{entry.start_time}</td>
                   <td className="mono">{entry.end_time}</td>

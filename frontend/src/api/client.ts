@@ -10,7 +10,7 @@ export interface Employee {
 }
 
 export interface EmployeeOptions {
-  allowed_sites: string[];
+  allowed_companies: string[];
   allowed_roles: string[];
 }
 
@@ -18,7 +18,7 @@ export interface TimeEntry {
   id: string;
   work_date: string;
   employee_id: string;
-  site_name: string;
+  company_name: string;
   role_name: string;
   start_time: string;
   end_time: string;
@@ -26,7 +26,7 @@ export interface TimeEntry {
 }
 
 export interface BreakdownItem {
-  site_name: string;
+  company_name: string;
   role_name: string;
   minutes: number;
   hours: number;
@@ -55,6 +55,122 @@ export interface ApiError {
   error: { code: string; message: string; details?: unknown };
 }
 
+// ─── Admin types ──────────────────────────────────────────────────────────────
+
+export interface EntityResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+}
+
+export interface TimeEntryResult {
+  inserted: number;
+  duplicates: number;
+  skipped: number;
+}
+
+export interface UploadSummary {
+  employees: EntityResult;
+  rates: EntityResult;
+  timeEntries: TimeEntryResult;
+  warnings: string[];
+}
+
+export interface DashboardData {
+  employeeCount: number;
+  totalEntries: number;
+  totalHoursWorked: number;
+  uniqueDays: number;
+  entriesPerDay: { work_date: string; entry_count: number; employee_count: number }[];
+  hoursPerEmployee: { employee_id: string; full_name: string; entry_count: number; days_worked: number; total_hours: number }[];
+  entriesByCompany: { company_name: string; entry_count: number; employee_count: number }[];
+}
+
+export interface AdminEmployee extends Employee {
+  entry_count: number;
+}
+
+export interface AdminTimeEntry extends TimeEntry {
+  employee_name: string;
+}
+
+export interface PaginatedTimeEntries {
+  entries: AdminTimeEntry[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface DeleteEmployeeResult {
+  success: true;
+  deleted: { time_entries: number; rates: number; allowed_companies: number; allowed_roles: number };
+}
+
+// ─── Insights types ──────────────────────────────────────────────────────────
+
+export interface InsightsFilters {
+  employee_id?: string;
+  company_name?: string;
+  role_name?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+export interface InsightsSummary {
+  totalEntries: number;
+  totalHours: number;
+  uniqueDays: number;
+  uniqueEmployees: number;
+  uniqueCompanies: number;
+  avgHoursPerDay: number;
+}
+
+export interface InsightsByEmployee {
+  employee_id: string;
+  full_name: string;
+  total_hours: number;
+  entry_count: number;
+  days_worked: number;
+}
+
+export interface InsightsByCompany {
+  company_name: string;
+  total_hours: number;
+  entry_count: number;
+  employee_count: number;
+}
+
+export interface InsightsByRole {
+  role_name: string;
+  total_hours: number;
+  entry_count: number;
+}
+
+export interface InsightsByDate {
+  work_date: string;
+  total_hours: number;
+  entry_count: number;
+}
+
+export interface InsightsByCompanyRole {
+  company_name: string;
+  role_name: string;
+  total_hours: number;
+  entry_count: number;
+}
+
+export interface InsightsData {
+  filters: InsightsFilters;
+  availableCompanies: string[];
+  availableRoles: string[];
+  summary: InsightsSummary;
+  byEmployee: InsightsByEmployee[];
+  byCompany: InsightsByCompany[];
+  byRole: InsightsByRole[];
+  byDate: InsightsByDate[];
+  byCompanyRole: InsightsByCompanyRole[];
+}
+
 // ─── Fetch wrapper ────────────────────────────────────────────────────────────
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -79,7 +195,7 @@ export const api = {
   createTimeEntry: (body: {
     employee_id: string;
     work_date: string;
-    site_name: string;
+    company_name: string;
     role_name: string;
     start_time: string;
     end_time: string;
@@ -91,4 +207,54 @@ export const api = {
 
   getDailyPayroll: (employeeId: string, workDate: string) =>
     request<DailyPayroll>(`/payroll/daily?employee_id=${employeeId}&work_date=${workDate}`),
+
+  // Admin endpoints
+  uploadExcel: async (file: File): Promise<{ success: boolean; summary: UploadSummary }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${BASE}/admin/upload`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw data as ApiError;
+    return data;
+  },
+
+  getDashboard: () =>
+    request<DashboardData>('/admin/dashboard'),
+
+  // Admin management
+  getAdminEmployees: () =>
+    request<AdminEmployee[]>('/admin/employees'),
+
+  getAdminTimeEntries: (params?: { employee_id?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.employee_id) qs.set('employee_id', params.employee_id);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString();
+    return request<PaginatedTimeEntries>(`/admin/time-entries${query ? '?' + query : ''}`);
+  },
+
+  updateTimeEntry: (id: string, body: Partial<Pick<TimeEntry, 'work_date' | 'company_name' | 'role_name' | 'start_time' | 'end_time'>>) =>
+    request<TimeEntry>(`/time-entries/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  deleteTimeEntry: (id: string) =>
+    request<{ success: true }>(`/time-entries/${id}`, { method: 'DELETE' }),
+
+  updateEmployee: (id: string, body: Partial<Pick<Employee, 'full_name' | 'status' | 'standard_daily_quota'>>) =>
+    request<Employee>(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  deleteEmployee: (id: string) =>
+    request<DeleteEmployeeResult>(`/employees/${id}`, { method: 'DELETE' }),
+
+  // Insights
+  getInsights: (filters?: InsightsFilters) => {
+    const qs = new URLSearchParams();
+    if (filters?.employee_id) qs.set('employee_id', filters.employee_id);
+    if (filters?.company_name) qs.set('company_name', filters.company_name);
+    if (filters?.role_name) qs.set('role_name', filters.role_name);
+    if (filters?.date_from) qs.set('date_from', filters.date_from);
+    if (filters?.date_to) qs.set('date_to', filters.date_to);
+    const query = qs.toString();
+    return request<InsightsData>(`/admin/insights${query ? '?' + query : ''}`);
+  },
 };

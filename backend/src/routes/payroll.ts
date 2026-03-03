@@ -4,7 +4,7 @@ import { calculateDailyPayroll } from '../services/payrollService';
 const router = Router();
 
 // GET /api/payroll/daily?employee_id=...&work_date=...
-router.get('/daily', (req: Request, res: Response) => {
+router.get('/daily', async (req: Request, res: Response) => {
   const { employee_id, work_date } = req.query;
 
   if (!employee_id || !work_date) {
@@ -16,7 +16,7 @@ router.get('/daily', (req: Request, res: Response) => {
     });
   }
 
-  const result = calculateDailyPayroll(employee_id as string, work_date as string);
+  const result = await calculateDailyPayroll(employee_id as string, work_date as string);
 
   if (!result) {
     return res.status(404).json({

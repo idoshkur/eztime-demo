@@ -7,7 +7,7 @@ export interface Employee {
 
 export interface Rate {
   employee_id: string;
-  site_name: string;
+  company_name: string;
   role_name: string;
   hourly_rate: number;
 }
@@ -16,7 +16,7 @@ export interface TimeEntry {
   id: string;
   work_date: string;
   employee_id: string;
-  site_name: string;
+  company_name: string;
   role_name: string;
   start_time: string;
   end_time: string;
@@ -24,7 +24,7 @@ export interface TimeEntry {
 }
 
 export interface BreakdownItem {
-  site_name: string;
+  company_name: string;
   role_name: string;
   minutes: number;
   hours: number;

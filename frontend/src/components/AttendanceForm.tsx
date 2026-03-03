@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, Employee, EmployeeOptions, ApiError } from '../api/client';
+import TimeInput from './TimeInput';
 
 interface Props {
   employees: Employee[];
@@ -18,8 +19,8 @@ export default function AttendanceForm({
   onDateChange,
   onSaved,
 }: Props) {
-  const [options, setOptions] = useState<EmployeeOptions>({ allowed_sites: [], allowed_roles: [] });
-  const [site, setSite] = useState('');
+  const [options, setOptions] = useState<EmployeeOptions>({ allowed_companies: [], allowed_roles: [] });
+  const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -29,14 +30,14 @@ export default function AttendanceForm({
   // Reload options when employee changes
   useEffect(() => {
     if (!selectedEmployee) {
-      setOptions({ allowed_sites: [], allowed_roles: [] });
+      setOptions({ allowed_companies: [], allowed_roles: [] });
       return;
     }
     api
       .getEmployeeOptions(selectedEmployee)
       .then(setOptions)
-      .catch(() => setOptions({ allowed_sites: [], allowed_roles: [] }));
-    setSite('');
+      .catch(() => setOptions({ allowed_companies: [], allowed_roles: [] }));
+    setCompany('');
     setRole('');
   }, [selectedEmployee]);
 
@@ -46,12 +47,12 @@ export default function AttendanceForm({
     setMessage(null);
     try {
       await api.createTimeEntry({
-        employee_id: selectedEmployee,
-        work_date:   selectedDate,
-        site_name:   site,
-        role_name:   role,
-        start_time:  startTime,
-        end_time:    endTime,
+        employee_id:  selectedEmployee,
+        work_date:    selectedDate,
+        company_name: company,
+        role_name:    role,
+        start_time:   startTime,
+        end_time:     endTime,
       });
       setMessage({ type: 'success', text: 'Entry saved successfully.' });
       setStartTime('');
@@ -100,28 +101,28 @@ export default function AttendanceForm({
           />
         </div>
 
-        {/* Site */}
+        {/* Company */}
         <div className="form-group">
-          <label htmlFor="site-field">Site</label>
-          {options.allowed_sites.length > 0 ? (
+          <label htmlFor="company-field">Company</label>
+          {options.allowed_companies.length > 0 ? (
             <select
-              id="site-field"
-              value={site}
-              onChange={(e) => setSite(e.target.value)}
+              id="company-field"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
               required
             >
-              <option value="">— Select site —</option>
-              {options.allowed_sites.map((s) => (
-                <option key={s} value={s}>{s}</option>
+              <option value="">— Select company —</option>
+              {options.allowed_companies.map((c) => (
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           ) : (
             <input
-              id="site-field"
+              id="company-field"
               type="text"
-              value={site}
-              onChange={(e) => setSite(e.target.value)}
-              placeholder="e.g. Main Office"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder="e.g. חברת בת א"
               required
             />
           )}
@@ -148,7 +149,7 @@ export default function AttendanceForm({
               type="text"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              placeholder="e.g. Security Guard"
+              placeholder="e.g. מאבטח"
               required
             />
           )}
@@ -157,11 +158,10 @@ export default function AttendanceForm({
         {/* Start time */}
         <div className="form-group">
           <label htmlFor="start-time">Start Time</label>
-          <input
+          <TimeInput
             id="start-time"
-            type="time"
             value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+            onChange={setStartTime}
             required
           />
         </div>
@@ -169,11 +169,10 @@ export default function AttendanceForm({
         {/* End time */}
         <div className="form-group">
           <label htmlFor="end-time">End Time</label>
-          <input
+          <TimeInput
             id="end-time"
-            type="time"
             value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
+            onChange={setEndTime}
             required
           />
         </div>
