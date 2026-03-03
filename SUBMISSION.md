@@ -15,156 +15,67 @@ This project was built with extensive use of AI tools:
 
 ---
 
-# Part A: Architecture & Product Management (Theoretical)
-
-## Question 1: Data Collection & Reliability
-
-How would we ensure a field employee actually was on-site when reporting hours? Two proposed solutions:
-
-### Solution 1: GPS Geofencing via Mobile App
-
-**How it works:** Each work site is defined as a geofence (a virtual boundary on the map with a center coordinate and radius, e.g., 100m). The employee's mobile app checks their GPS location at clock-in and clock-out. If the employee is outside the geofence, the system blocks or flags the report.
-
-| Dimension | Analysis |
-|-----------|----------|
-| **Cost** | Low-Medium. Uses built-in phone GPS — no additional hardware needed. Requires a mobile app (one-time development cost). Ongoing cost is minimal. |
-| **Dev Complexity** | Medium. Requires a mobile app (iOS + Android or cross-platform), geofence management backend, and a GPS permission handling flow. Needs to handle edge cases: GPS drift, indoor inaccuracy, employees working across large sites. |
-| **UX** | Good. Employee just opens the app and taps "Clock In" — location check happens automatically. However, GPS permission prompts can cause friction, and indoor locations (warehouses, malls) may have poor GPS accuracy. Battery drain from continuous location tracking can be a concern. |
-
-**Pros:** No extra hardware, works everywhere with cellular coverage, can retroactively verify location data, scalable to hundreds of sites.
-**Cons:** GPS accuracy is ±5-20m (worse indoors), employees can spoof GPS with apps (mitigatable with anti-spoofing), requires smartphone with location permissions enabled.
-
-### Solution 2: NFC/QR Code Tags at Physical Sites
-
-**How it works:** A physical NFC tag or printed QR code is placed at each work site entrance. The employee must physically scan the tag with their phone to clock in/out. Each tag has a unique encrypted ID tied to a specific site. The system validates that the scanned tag matches the expected site for the employee's shift.
-
-| Dimension | Analysis |
-|-----------|----------|
-| **Cost** | Low. NFC tags cost ~$1-3 each. QR codes can be printed for free. No recurring hardware cost. Still requires a mobile app to scan. |
-| **Dev Complexity** | Low-Medium. NFC/QR scanning is a well-supported feature in modern phones. Backend just needs to validate the tag ID against the site database. Simpler than GPS — no geofence calculations or location permissions needed. |
-| **UX** | Excellent. Clear physical action — "tap your phone on the tag." No ambiguity about whether you're on-site. Fast (NFC scan takes <1 second). QR code scanning is universally understood. No battery drain issues. |
-
-**Pros:** Very hard to fake (NFC tags require physical proximity of ~4cm), works perfectly indoors, no GPS permissions needed, simple and intuitive UX, extremely low cost per site.
-**Cons:** Requires physical installation at each site (someone must place the tag), tags can be damaged/removed/stolen (mitigatable with alerts), doesn't continuously verify presence (only clock-in/out moments), requires NFC-capable phone (most modern smartphones have it).
-
-**Recommendation:** A hybrid approach — NFC/QR for primary clock-in/out verification (highest reliability) combined with periodic GPS checks during the shift for continuous presence verification. This gives the best of both worlds: strong entry/exit validation with ongoing monitoring.
-
----
-
-## Question 2: Data Flow
-
-The complete data flow from clock-in to payroll-ready output:
-
-```
-[Employee on-site]
-        │
-        ▼
-┌─────────────────────┐
-│  1. CLOCK IN EVENT  │  Employee scans NFC tag / opens app
-│                     │  → Captures: employee_id, timestamp, site_id,
-│                     │    GPS coordinates, device_id
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  2. VALIDATION      │  Real-time checks:
-│     LAYER           │  • Is employee registered for this site?
-│                     │  • Is this a valid work day for them?
-│                     │  • Anti-fraud: GPS matches site? Device recognized?
-│                     │  • No duplicate clock-in already open?
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  3. RAW EVENT       │  Stored as immutable record:
-│     STORAGE         │  { employee_id, work_date, company_name,
-│                     │    role_name, clock_in_time, clock_out_time,
-│                     │    site_id, verification_method }
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  4. HOURS ENGINE    │  Daily aggregation & business rules:
-│     (Calculation)   │  • Sum total hours across all entries for the day
-│                     │  • Detect split shifts (multiple entries same day)
-│                     │  • Calculate night shift minutes (22:00–06:00)
-│                     │  • Apply overtime tiers: 100% / 125% / 150%
-│                     │  • Adjust overtime threshold (8h or 7h for night)
-│                     │  • Calculate daily deficit vs. quota
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  5. RATE ENGINE     │  Salary calculation:
-│                     │  • Look up rate for [employee + company + role]
-│                     │  • If multiple rates in same day → use MAX rate
-│                     │  • Apply rate to each overtime tier:
-│                     │    salary = (hrs@100% × rate) +
-│                     │             (hrs@125% × rate × 1.25) +
-│                     │             (hrs@150% × rate × 1.5)
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  6. PAYROLL OUTPUT  │  Final structured data ready for export:
-│                     │  • Per-day breakdown: hours, tiers, salary, deficit
-│                     │  • Per-company breakdown: hours by company+role
-│                     │  • Monthly aggregation: total pay, total deficit
-│                     │  • Export formats: JSON API, Excel download
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  7. EXTERNAL        │  Integration with payroll systems:
-│     PAYROLL SYSTEM  │  • REST API endpoint provides structured data
-│                     │  • Excel export for manual import
-│                     │  • Ready for integration with payroll software
-└─────────────────────┘
-```
-
-**Key design principles in this flow:**
-- **Immutability:** Raw clock events are never modified — all calculations are derived
-- **Separation of concerns:** Collection, validation, calculation, and export are independent layers
-- **Auditability:** Every step produces traceable data
-- **Flexibility:** Rate changes, rule changes, and new companies can be added without affecting historical data
-
----
-
 # Part B: Demo Implementation
 
 ## Live System
 
 **URL:** https://eztime-demo.onrender.com
 
-The system is deployed and fully functional. It includes:
+*(Note: The system is hosted on Render's free tier. The first load may take ~30 seconds if the server has been idle.)*
 
-### Employee Tab
-- Select an employee from the list
-- Choose a work date, company (from allowed list), and role (from allowed list)
-- Enter start/end times using a 24-hour time input
-- System calculates and displays:
-  - Total daily hours
-  - Hours at 100%, 125%, and 150% tiers
-  - Night shift minutes
-  - Applied hourly rate (MAX across all entries)
-  - Gross daily salary calculation
-  - Daily deficit from quota
-  - Breakdown by company and role
+The system is a fully functional POC for the holding-company attendance & payroll challenge. An employee can work for different subsidiary companies in different roles on different days, with a unique hourly rate per [employee + company + role] combination. The system calculates hours, overtime tiers, salary, and daily deficit — all persisted in a cloud database.
+
+### Employee View
+
+The employee-facing interface allows:
+- **Select an employee** from the existing list
+- **Choose a work date**, a company (from the employee's allowed companies), and a role (from the employee's allowed roles)
+- **Enter start/end times** using a custom 24-hour time input (HH:MM)
+- **View daily payroll summary** — the system calculates and displays:
+  - Total daily hours worked
+  - Overtime tier breakdown: hours at 100%, 125%, and 150%
+  - Night shift detection (minutes worked between 22:00–06:00)
+  - Applied hourly rate (the MAX rate across all entries for that day)
+  - Gross daily salary simulation with the tier formula
+  - Daily deficit from the employee's quota (standard - worked, min 0)
+  - Breakdown of hours by company and role
 
 ### Admin Panel
-- **Dashboard:** KPIs with total employees, entries, hours, and visual breakdowns
-- **Upload Excel:** Import employee data, rates, and time entries from .xlsx files (matching the provided Excel structure)
-- **Manage Employees:** Full CRUD — create (with allowed companies/roles), edit, delete employees, and manage their rates
-- **Manage Time Entries:** Create, edit, delete time entries with overlap detection and validation
-- **Data Insights:** Filterable analytics by employee, company, role, and date range
-- **Payroll Report:** Monthly payroll breakdown per employee with daily pay, deficit tracking, and Excel export
 
-### Data Validation
-- Overlapping shift detection (prevents double-reporting)
-- Company/role authorization checks
-- Rate existence verification
-- Time format and duration validation
-- Duplicate employee prevention
+The admin panel provides full management capabilities:
+
+- **Dashboard** — KPI overview: active employees, total entries, total hours, unique work days. Charts for entries per day, hours per employee, and entries by company.
+- **Upload Excel** — Bulk import of employees, rates, and time entries from .xlsx files. The parser matches the structure of the provided Excel file (employees sheet, rates sheet, time entries sheet). Handles upsert logic — existing records are updated, new ones are inserted, duplicates are skipped.
+- **Manage Employees** — Full CRUD operations:
+  - Create new employees with ID, name, status, daily quota, allowed companies, and allowed roles
+  - Inline edit of employee details
+  - Rate management per employee — add, edit, delete hourly rates per company+role
+  - Delete employees (cascades to all related entries, rates, and permissions)
+- **Manage Time Entries** — Full CRUD with validation:
+  - Create new time entries with employee dropdown, date picker, company/role selectors (populated from the employee's allowed list), and time inputs
+  - Inline edit of existing entries
+  - Delete entries with confirmation
+  - Pagination (25 per page) and filter by employee
+- **Data Insights** — Analytics dashboard with flexible filtering:
+  - Filter by employee, company, role, date range
+  - KPI cards: total hours, entries, work days, average hours/day
+  - Breakdown tables: by employee, by company, by role, by company+role, by date
+- **Payroll Report** — Monthly payroll breakdown per employee:
+  - Select an employee and a month (YYYY-MM)
+  - Daily table showing: date, hours worked, quota, deficit, 100%/125%/150% tiers, hourly rate, daily pay
+  - Monthly summary row with totals
+  - KPI cards: total hours, total deficit, monthly paycheck, work days
+  - **Download as Excel** — exports the full monthly payroll report as a .xlsx file
+
+### Data Validation & Integrity
+
+The system enforces data accuracy at multiple levels:
+- **Overlapping shift detection** — prevents creating time entries that overlap with existing entries for the same employee on the same day (e.g., "08:00–12:00 overlaps with 10:00–14:00")
+- **Company/role authorization** — an employee can only clock into companies and roles they are assigned to
+- **Rate verification** — a time entry can only be created if a rate exists for that employee+company+role combination
+- **Time format validation** — enforces HH:MM format, valid ranges, duration > 0, max 16 hours
+- **Duplicate prevention** — employee IDs must be unique; Excel upload skips duplicate time entries
+- **Client-side warnings** — immediate feedback when start time equals end time
 
 ---
 
@@ -176,7 +87,8 @@ The system is deployed and fully functional. It includes:
 |-------|-------|
 | **URL** | `/api/payroll/daily` |
 | **Method** | `GET` |
-| **Required Params** | `employee_id` (string), `work_date` (string, YYYY-MM-DD) |
+| **Required Params** | `employee_id` (string) — the employee identifier |
+| | `work_date` (string, YYYY-MM-DD) — the work date to analyze |
 
 ### Example Request
 
@@ -257,9 +169,9 @@ GET /api/payroll/daily?employee_id=EMP-001&work_date=2025-01-15
 | `hours_125` | number | Hours paid at 125% (threshold to 10h) |
 | `hours_150` | number | Hours paid at 150% (above 10h) |
 | `applied_hourly_rate` | number | MAX hourly rate across all entries that day |
-| `gross_daily_salary` | number | Calculated salary: (h100 × rate) + (h125 × rate × 1.25) + (h150 × rate × 1.5) |
-| `daily_deficit_hours` | number | max(quota - total_hours, 0) |
-| `entries` | array | All time entries for that day |
+| `gross_daily_salary` | number | Calculated: `(h100 * rate) + (h125 * rate * 1.25) + (h150 * rate * 1.5)` |
+| `daily_deficit_hours` | number | `max(quota - total_hours, 0)` |
+| `entries` | array | All raw time entries for that day |
 | `breakdown_by_site_role` | array | Hours grouped by company + role combination |
 
 ### Example Error Response (400 Bad Request)
@@ -277,31 +189,44 @@ GET /api/payroll/daily?employee_id=EMP-001&work_date=2025-01-15
 
 | Code | HTTP Status | Description |
 |------|-------------|-------------|
-| `MISSING_PARAMS` | 400 | `employee_id` or `work_date` not provided |
+| `MISSING_PARAMS` | 400 | `employee_id` or `work_date` query param not provided |
 | `EMPLOYEE_NOT_FOUND` | 400 | Employee ID does not exist in the system |
 
 ---
 
 # Bonus 2: API Implementation
 
-The API is fully implemented and live. All endpoints are accessible at:
+The API is fully implemented and live at:
 
 **Base URL:** `https://eztime-demo.onrender.com/api`
 
-### Key Endpoints
+### All Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/payroll/daily?employee_id=...&work_date=...` | Daily payroll analysis |
 | `GET` | `/employees` | List all employees |
+| `POST` | `/employees` | Create a new employee |
 | `GET` | `/employees/:id/options` | Get allowed companies/roles for an employee |
-| `POST` | `/time-entries` | Create a time entry (with validation) |
-| `GET` | `/time-entries?employee_id=...&work_date=...` | Get entries for a day |
-| `GET` | `/admin/payroll-report?employee_id=...&month=YYYY-MM` | Monthly payroll report |
-| `GET` | `/admin/payroll-report/export?employee_id=...&month=YYYY-MM` | Download Excel payroll |
+| `PUT` | `/employees/:id` | Update employee details |
+| `DELETE` | `/employees/:id` | Delete employee and all related data |
+| `POST` | `/time-entries` | Create a time entry (with full validation) |
+| `GET` | `/time-entries?employee_id=...&work_date=...` | Get time entries for a specific day |
+| `PUT` | `/time-entries/:id` | Update a time entry |
+| `DELETE` | `/time-entries/:id` | Delete a time entry |
+| `GET` | `/payroll/daily?employee_id=...&work_date=...` | **Daily payroll analysis** |
+| `POST` | `/admin/upload` | Upload Excel file (multipart/form-data) |
+| `GET` | `/admin/dashboard` | Dashboard KPIs |
+| `GET` | `/admin/employees` | List employees with entry counts |
+| `GET` | `/admin/time-entries?page=...&limit=...` | Paginated time entries |
+| `GET` | `/admin/rates?employee_id=...` | List rates |
+| `POST` | `/admin/rates` | Create a rate |
+| `PUT` | `/admin/rates` | Update a rate |
+| `DELETE` | `/admin/rates` | Delete a rate |
 | `GET` | `/admin/insights?employee_id=...&company_name=...` | Filterable data insights |
+| `GET` | `/admin/payroll-report?employee_id=...&month=YYYY-MM` | Monthly payroll report (JSON) |
+| `GET` | `/admin/payroll-report/export?employee_id=...&month=YYYY-MM` | Monthly payroll report (Excel download) |
 
-*Note: Postman screenshots demonstrating success and error responses are attached separately.*
+*Postman screenshots demonstrating success and error responses should be attached separately.*
 
 ---
 
@@ -309,66 +234,108 @@ The API is fully implemented and live. All endpoints are accessible at:
 
 ## Technology Stack
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| **Backend** | Node.js + Express + TypeScript | Fast development, type safety, rich ecosystem |
-| **Frontend** | React + Vite + TypeScript | Modern SPA framework, fast build tooling |
-| **Database** | Turso (libSQL) | SQLite-compatible cloud database — free tier, persistent storage, no server management |
-| **Deployment** | Render.com | Free tier hosting, auto-deploys from GitHub on every push |
-| **Excel Parsing** | xlsx (SheetJS) | Industry-standard library for reading/writing Excel files |
+| Layer | Technology | Reasoning |
+|-------|-----------|-----------|
+| **Backend** | Node.js + Express + TypeScript | Fast development cycle, strong typing for business logic correctness, large ecosystem for middleware (multer, xlsx) |
+| **Frontend** | React + Vite + TypeScript | Component-based UI with type safety, Vite provides fast builds and HMR during development |
+| **Database** | Turso (libSQL) | Cloud-hosted SQLite-compatible database — zero configuration, free tier, persistent data across deployments, no separate DB server needed |
+| **Deployment** | Render.com | Free-tier web service with auto-deploy from GitHub. Every `git push` triggers a new build and deployment |
+| **Excel I/O** | xlsx (SheetJS) | Industry-standard library used for both reading uploaded .xlsx files and generating downloadable payroll reports |
 
 ## Architecture
 
-The system is a **monolithic full-stack application** deployed as a single service:
+The system is deployed as a **single monolithic service** on Render.com:
 
 ```
-┌─────────────────────────────────────────┐
-│              Render.com                  │
-│                                          │
-│  ┌──────────────────────────────────┐   │
-│  │         Express Server            │   │
-│  │                                    │   │
-│  │  /api/*  →  Backend Routes         │   │
-│  │  /*      →  React SPA (static)     │   │
-│  └──────────┬───────────────────────┘   │
-│             │                            │
-│             ▼                            │
-│  ┌──────────────────────────────────┐   │
-│  │    Turso Cloud Database           │   │
-│  │    (libSQL / SQLite-compatible)   │   │
-│  └──────────────────────────────────┘   │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│              Render.com                   │
+│                                           │
+│  ┌───────────────────────────────────┐   │
+│  │         Express Server             │   │
+│  │                                     │   │
+│  │  /api/*  →  REST API (20+ routes)   │   │
+│  │  /*      →  React SPA (static)      │   │
+│  └──────────┬────────────────────────┘   │
+│             │                             │
+│             ▼                             │
+│  ┌───────────────────────────────────┐   │
+│  │    Turso Cloud Database            │   │
+│  │    (libSQL — SQLite-compatible)    │   │
+│  └───────────────────────────────────┘   │
+└──────────────────────────────────────────┘
 ```
 
-Express serves both the API routes and the compiled React frontend as static files. This means a single deployment URL serves everything.
+The Express server serves both the API routes and the compiled React frontend as static files. A single URL handles everything — no CORS, no separate frontend deployment.
 
 ## Database Schema
 
-Five tables handle the complete data model:
+Five tables model the holding-company structure:
 
-- **`employees`** — Employee master data (ID, name, status, daily quota)
-- **`employee_allowed_companies`** — Which companies an employee can work for
-- **`employee_allowed_roles`** — Which roles an employee can fill
-- **`rates`** — Hourly rate per [employee + company + role] combination
-- **`time_entries`** — Clock-in/out records (date, company, role, start/end time)
+- **`employees`** — Master data: employee_id (PK), full_name, status, standard_daily_quota
+- **`employee_allowed_companies`** — Many-to-many: which subsidiary companies an employee can work for
+- **`employee_allowed_roles`** — Many-to-many: which roles an employee can fill
+- **`rates`** — Composite key (employee_id + company_name + role_name) → hourly_rate. This is the core of the multi-company model.
+- **`time_entries`** — Clock records: id (UUID PK), work_date, employee_id, company_name, role_name, start_time, end_time, created_at
+
+This schema directly maps to the business requirement: each combination of [employee + company + role] has its own rate, and the system tracks exactly which company and role each work entry belongs to.
 
 ## Payroll Calculation Engine
 
-The core business logic (`payrollService.ts`) implements all the required rules:
+The core business logic lives in `payrollService.ts` and implements all required rules:
 
-1. **Aggregate daily hours** — Sum all entry durations (handles midnight-crossing shifts)
-2. **Night shift detection** — Count minutes in the 22:00–06:00 window
-3. **Overtime threshold** — 8 hours normally, 7 hours if night_minutes >= 120
-4. **Tier calculation** — 100% (up to threshold), 125% (threshold to 10h), 150% (above 10h)
-5. **Rate selection** — MAX hourly rate across all entries that day
-6. **Salary** — `(hours_100 × rate) + (hours_125 × rate × 1.25) + (hours_150 × rate × 1.5)`
-7. **Deficit** — `max(quota - total_hours, 0)`
+1. **Aggregate daily hours** — Sums durations across all entries for the day, correctly handling midnight-crossing shifts (e.g., 22:00–06:00 = 8 hours, not -16)
+2. **Night shift detection** — Counts minutes in the 22:00–06:00 window, split into an evening half (22:00–00:00) and morning half (00:00–06:00)
+3. **Overtime threshold** — Standard threshold is 8 hours. If night_minutes >= 120 (2 hours), threshold drops to 7 hours
+4. **Tier calculation:**
+   - `hours_100` = min(total_hours, threshold)
+   - `hours_125` = min(max(total_hours - threshold, 0), 10 - threshold)
+   - `hours_150` = max(total_hours - 10, 0)
+5. **Rate selection** — When an employee works multiple companies/roles in one day, the MAX hourly rate is used for the entire day's calculation (as specified in the requirements)
+6. **Gross salary** = `(hours_100 × rate) + (hours_125 × rate × 1.25) + (hours_150 × rate × 1.5)`
+7. **Daily deficit** = `max(standard_daily_quota - total_hours, 0)` — negative deficit is clamped to 0
 
-## Key Features Beyond Requirements
+## Project Structure
 
-- **Overlap detection** — Prevents employees from having conflicting time entries
-- **Admin panel** — Full CRUD for employees, rates, and time entries
-- **Excel upload** — Bulk import matching the provided Excel structure
-- **Data insights** — Filterable analytics dashboard
-- **Monthly payroll report** — Aggregated view with Excel download
-- **Responsive design** — Works on desktop and mobile
+```
+eztime-demo/
+├── backend/
+│   ├── src/
+│   │   ├── index.ts              — Express app setup, serves frontend in prod
+│   │   ├── db/index.ts           — Turso database connection singleton
+│   │   ├── db/schema.ts          — Table creation (DDL)
+│   │   ├── routes/
+│   │   │   ├── employees.ts      — Employee CRUD + allowed companies/roles
+│   │   │   ├── timeEntries.ts    — Time entry CRUD + validation + overlap detection
+│   │   │   ├── payroll.ts        — Daily payroll calculation endpoint
+│   │   │   └── admin.ts          — Upload, dashboard, insights, rates, payroll report
+│   │   ├── services/
+│   │   │   ├── payrollService.ts  — Core payroll calculation engine
+│   │   │   └── adminUploadService.ts — Excel import with upsert logic
+│   │   └── utils/
+│   │       └── excelParser.ts     — Excel file parsing (employees, rates, entries)
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx                — Main app with Employee/Admin tabs
+│   │   ├── api/client.ts          — Typed API client (all endpoints + types)
+│   │   └── components/
+│   │       ├── AttendanceForm.tsx  — Employee clock-in form
+│   │       ├── DailySummary.tsx    — Daily payroll display
+│   │       ├── TimeInput.tsx       — Custom 24h time input
+│   │       ├── AdminDashboard.tsx  — Dashboard KPIs
+│   │       ├── AdminUpload.tsx     — Excel upload form
+│   │       ├── AdminEmployeeManager.tsx — Employee + rate CRUD
+│   │       ├── AdminTimeEntryManager.tsx — Time entry CRUD
+│   │       └── AdminInsights.tsx   — Data insights + payroll report
+│   └── package.json
+├── package.json                    — Root package for unified build/deploy
+└── render.yaml                     — Render deployment config
+```
+
+## Key Design Decisions
+
+1. **Single deployment** — Backend serves the frontend as static files, simplifying deployment to a single Render service with one URL.
+2. **Cloud database (Turso)** — Avoids the need for SQLite file storage on an ephemeral free-tier server. Data persists independently of deployments.
+3. **Validation at the API layer** — All business rules (overlap detection, authorization, rate checks) are enforced server-side. The frontend provides UX hints but the backend is the source of truth.
+4. **Reusable payroll engine** — `calculateDailyPayroll()` is called by both the employee-facing daily view and the admin monthly payroll report, ensuring consistent calculations everywhere.
+5. **Excel round-trip** — The same `xlsx` library handles both import (upload) and export (payroll report download), keeping the data format consistent.
