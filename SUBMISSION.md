@@ -532,7 +532,17 @@ All errors follow a consistent JSON structure:
 
 ## Postman Screenshots
 
-*Screenshots will be added showing the key API flows tested in Postman.*
+### GET /api/employees/:id/options — Success (200 OK)
+
+![Postman - Employee Options 200 OK](docs/screenshots/postman-employee-options-200.png)
+
+Returns the allowed companies and roles for employee E1001. Response: `200 OK` with `allowed_companies` and `allowed_roles` arrays.
+
+### GET /api/employees/:id/options — Error (404 Not Found)
+
+![Postman - Employee Options 404](docs/screenshots/postman-employee-options-404.png)
+
+Requesting options for a non-existent employee ID (`E1000001`). Response: `404 Not Found` with error code `EMPLOYEE_NOT_FOUND`.
 
 ---
 
