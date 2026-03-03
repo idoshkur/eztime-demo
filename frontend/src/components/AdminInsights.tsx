@@ -11,6 +11,15 @@ function round2(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
+function getAvailableMonths(data: InsightsData | null): string[] {
+  if (!data || data.byDate.length === 0) return [];
+  const months = new Set<string>();
+  for (const row of data.byDate) {
+    months.add(row.work_date.slice(0, 7)); // "YYYY-MM"
+  }
+  return Array.from(months).sort().reverse();
+}
+
 export default function AdminInsights() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [data, setData] = useState<InsightsData | null>(null);
@@ -101,7 +110,7 @@ export default function AdminInsights() {
     if (!exportAllMonth) return;
     setDownloadingAll(true);
     try {
-      await api.downloadAllPayrollExcel(exportAllMonth);
+      await api.downloadAllPayrollExcel(exportAllMonth, filterEmployee || undefined);
     } catch {
       setPayrollError('Failed to download all-employees Excel file.');
     } finally {
@@ -344,19 +353,23 @@ export default function AdminInsights() {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.75rem', marginBottom: '1.25rem', padding: '0.75rem', background: 'var(--bg-alt, #f9fafb)', borderRadius: '8px' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label htmlFor="export-all-month">Month</label>
-            <input
+            <select
               id="export-all-month"
-              type="month"
               value={exportAllMonth}
               onChange={(e) => setExportAllMonth(e.target.value)}
-            />
+            >
+              <option value="">Select month...</option>
+              {getAvailableMonths(data).map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
           </div>
           <button
             className="btn-primary"
             disabled={!exportAllMonth || downloadingAll}
             onClick={handleDownloadAllExcel}
           >
-            {downloadingAll ? 'Downloading...' : 'Export All Employees to Excel'}
+            {downloadingAll ? 'Downloading...' : filterEmployee ? 'Export Filtered Employee to Excel' : 'Export All Employees to Excel'}
           </button>
         </div>
 
@@ -379,12 +392,16 @@ export default function AdminInsights() {
 
           <div className="form-group">
             <label htmlFor="pr-month">Month</label>
-            <input
+            <select
               id="pr-month"
-              type="month"
               value={payrollMonth}
               onChange={(e) => { setPayrollMonth(e.target.value); setPayrollReport(null); }}
-            />
+            >
+              <option value="">Select month...</option>
+              {getAvailableMonths(data).map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group" style={{ justifyContent: 'flex-end' }}>

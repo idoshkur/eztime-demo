@@ -596,6 +596,7 @@ router.get('/payroll-report/export', async (req: Request, res: Response) => {
 
 router.get('/payroll-report/export-all', async (req: Request, res: Response) => {
   const month = req.query.month as string | undefined;
+  const filterEmployeeId = req.query.employee_id as string | undefined;
 
   if (!month) {
     return res.status(400).json({
@@ -609,8 +610,24 @@ router.get('/payroll-report/export-all', async (req: Request, res: Response) => 
   }
 
   const db = getDb();
-  const empResult = await db.execute("SELECT employee_id FROM employees WHERE status = 'active' ORDER BY full_name");
-  const employeeIds = empResult.rows.map((r) => (r as unknown as { employee_id: string }).employee_id);
+  let employeeIds: string[];
+
+  if (filterEmployeeId) {
+    // Export only the filtered employee
+    const empCheck = await db.execute({
+      sql: 'SELECT employee_id FROM employees WHERE employee_id = ?',
+      args: [filterEmployeeId],
+    });
+    if (empCheck.rows.length === 0) {
+      return res.status(404).json({
+        error: { code: 'EMPLOYEE_NOT_FOUND', message: `Employee "${filterEmployeeId}" not found` },
+      });
+    }
+    employeeIds = [filterEmployeeId];
+  } else {
+    const empResult = await db.execute("SELECT employee_id FROM employees WHERE status = 'active' ORDER BY full_name");
+    employeeIds = empResult.rows.map((r) => (r as unknown as { employee_id: string }).employee_id);
+  }
 
   if (employeeIds.length === 0) {
     return res.status(404).json({
@@ -665,8 +682,11 @@ router.get('/payroll-report/export-all', async (req: Request, res: Response) => 
         { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
       ];
 
-      // Sheet name max 31 chars
-      const sheetName = report.employee.full_name.slice(0, 28);
+      // Sheet name max 31 chars, deduplicate if needed
+      let sheetName = report.employee.full_name.slice(0, 28);
+      if (wb.SheetNames.includes(sheetName)) {
+        sheetName = `${sheetName.slice(0, 25)} (${empId.slice(-3)})`;
+      }
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
     }
   }

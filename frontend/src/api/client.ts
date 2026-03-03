@@ -347,8 +347,10 @@ export const api = {
     URL.revokeObjectURL(url);
   },
 
-  downloadAllPayrollExcel: async (month: string) => {
-    const res = await fetch(`${BASE}/admin/payroll-report/export-all?month=${month}`);
+  downloadAllPayrollExcel: async (month: string, employeeId?: string) => {
+    const qs = new URLSearchParams({ month });
+    if (employeeId) qs.set('employee_id', employeeId);
+    const res = await fetch(`${BASE}/admin/payroll-report/export-all?${qs}`);
     if (!res.ok) {
       const data = await res.json();
       throw data as ApiError;

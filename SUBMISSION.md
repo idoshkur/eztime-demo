@@ -15,6 +15,197 @@ This project was built with extensive use of AI tools:
 
 ---
 
+# Part A: Architecture & Product Design (Theoretical)
+
+## Background & Core Challenges
+
+Managing a workforce within a complex multi-site organization introduces two primary challenges:
+
+1. **Data Reliability:** Preventing fraudulent reporting (e.g., remote check-ins) and ensuring verified employee identity.
+2. **Accurate Attribution:** Ensuring working hours are assigned to the correct site and role, especially when employees perform multiple roles or work at different sites on the same day.
+
+The key business risk is not only inaccurate hour reporting, but incorrect attribution of hours to a higher-paying site or role, which may lead to payroll inaccuracies and financial exposure.
+
+### Selected Product Concept: Passive Reporter Model
+
+The employee is defined as a **passive reporter**:
+- The employee does **not** select: the site, the role, or the pay rate
+- All shift parameters are predefined in the scheduling system by the employer
+- The employee only confirms physical presence (check-in / check-out)
+
+This approach significantly reduces manipulation risk and strengthens operational control.
+
+---
+
+## 1. Technological Solutions for Data Collection & Reliability
+
+### Solution A: Physical Attendance Terminal (Biometric / Smart Card)
+
+**Description:** A physical attendance terminal is installed at each work site, allowing employees to check in and out using fingerprint authentication or a smart employee card.
+
+**Operational Flow:**
+1. The manager defines a daily schedule in advance.
+2. The employee arrives at the site and performs a clock-in at the terminal.
+3. The server performs validation checks: an active schedule exists, entry time is within acceptable deviation limits.
+4. The event is automatically linked to the predefined schedule.
+5. The employee cannot modify the site or role.
+
+| Advantages | Disadvantages |
+|------------|---------------|
+| Highest fraud prevention (prevents buddy punching and remote reporting) | Hardware costs (purchase, installation, maintenance) |
+| No smartphone/battery/data plan required | Physical setup and deployment time |
+| Simple "touch and go" UX | Less suitable for temporary sites |
+| Works in GPS-restricted areas (underground, warehouses) | |
+
+**RICE Evaluation:**
+- **Reach:** Very High (up to 100% of workforce)
+- **Impact:** High (complete identity verification)
+- **Confidence:** Very High (biometric/site-based validation)
+- **Effort:** Medium (hardware logistics and installation)
+
+**Business Fit:** Best for permanent, high-volume, or sensitive sites where maximum reliability is required.
+
+### Solution B: Location-Based Mobile Application
+
+**Description:** A mobile application that allows attendance reporting only when the employee is within a predefined geographic radius of the assigned work site.
+
+**Operational Flow:**
+1. The manager defines a daily schedule.
+2. The employee arrives and opens the app.
+3. "Check-In" becomes active only if the employee is within the defined radius and an active schedule exists.
+4. The event is stored with timestamp and location metadata.
+
+| Advantages | Disadvantages |
+|------------|---------------|
+| Immediate deployment across thousands of sites | Privacy concerns (location tracking) |
+| Minimal cost (software-only) | Requires smartphone with sufficient battery |
+| Real-time push notifications | Moderate reliability (GPS can be inaccurate indoors) |
+| Easily supports temporary sites | |
+
+**RICE Evaluation:**
+- **Reach:** Medium–High (depends on workforce demographics)
+- **Impact:** Medium–High (significant improvement over manual reporting)
+- **Confidence:** Medium (GPS limitations)
+- **Effort:** Low (software development only)
+
+**Business Fit:** Best for temporary, distributed, or mobile workforce environments.
+
+### Recommended Business Approach
+
+Given the sensitivity of payroll accuracy and the financial risk associated with incorrect role attribution, the chosen solution is **Physical Attendance Terminals (Solution A)**.
+
+This provides: the highest level of identity verification, elimination of personal device dependency, reliable on-site presence validation, and maximum payroll accuracy in role-based compensation environments.
+
+---
+
+## 2. Data Flow Architecture
+
+### Architectural Principle
+
+The system follows an **event-driven architecture** and separates:
+- **Raw Data Layer:** Attendance events as recorded
+- **Business Processing Layer:** Hour calculation, overtime classification, and payroll preparation
+
+This separation ensures scalability and flexibility for future policy changes.
+
+### Step 1: Event Capture (Client Layer)
+
+The endpoint sends a raw event object (without hour calculations):
+
+```json
+{
+  "event_id": "uuid-12345",
+  "employee_id": "E1001",
+  "timestamp": "2026-02-04T07:15:00Z",
+  "event_type": "CHECK_IN",
+  "source": {
+    "type": "BIOMETRIC_TERMINAL",
+    "device_id": "TERM-SOUTH-04"
+  },
+  "verification": {
+    "method": "FINGERPRINT",
+    "status": "SUCCESS"
+  }
+}
+```
+
+### Step 2: Validation & Alerting
+
+The server validates: an active scheduled shift exists, time deviation is within tolerance, logical sequence (no check-out without check-in).
+
+If validation fails, an alert is generated:
+
+```json
+{
+  "alert_type": "UNAUTHORIZED_REPORT",
+  "severity": "CRITICAL",
+  "message": "Employee E1001 is not scheduled for SITE_SOUTH today",
+  "actions": ["NOTIFY_MANAGER", "NOTIFY_EMPLOYEE_PUSH"],
+  "original_event_id": "uuid-12345"
+}
+```
+
+All events, including rejected ones, are stored for audit purposes.
+
+### Step 3: Work Session Builder
+
+Matching check-in and check-out events create a session:
+
+```json
+{
+  "session_id": "sess-9988",
+  "employee_id": "E1001",
+  "site_id": "SITE_402",
+  "role_id": "WAREHOUSE_OP",
+  "actual_start": "2026-02-04T07:15:00Z",
+  "actual_end": "2026-02-04T16:45:00Z"
+}
+```
+
+Multiple sessions per day are supported (split shifts).
+
+### Step 4: Daily Hours Classification
+
+**Step 4.1 — Aggregate Daily Work Time:** All sessions on the same day are summed. Split shifts are combined before overtime logic.
+
+**Step 4.2 — Determine Overtime Threshold:**
+- Default: overtime begins after **8 hours**
+- Night rule: if night_hours >= 2 (between 22:00–06:00), threshold drops to **7 hours**
+
+**Step 4.3 — Classify Hours into Payment Tiers:**
+- **100% (Regular):** Up to the overtime threshold (7 or 8 hours)
+- **125% (Overtime Level 1):** From the threshold up to 10 total hours
+- **150% (Overtime Level 2):** Any hours beyond 10 total hours
+
+*Example: Employee worked 10.5 hours, no night shift → threshold = 8 → Regular = 8h, 125% = 2h, 150% = 0.5h*
+
+### Step 5: Rate Assignment & Salary Calculation
+
+**Step 5.1 — Applied Rate:** If the employee worked at multiple sites/roles on the same day:
+`applied_hourly_rate = MAX(hourly_rate)` across all entries that day.
+
+**Step 5.2 — Gross Daily Salary:**
+```
+salary_100 = hours_100 × rate
+salary_125 = hours_125 × rate × 1.25
+salary_150 = hours_150 × rate × 1.5
+gross_daily_salary = salary_100 + salary_125 + salary_150
+```
+
+*Example: rate = ₪87 → 8×87 + 2×87×1.25 + 0.5×87×1.5 = 696 + 217.5 + 65.25 = **₪978.75***
+
+### Step 6: Audit & Transparency
+
+All raw events are permanently stored, including rejected reports. This enables: recalculation if rules change, dispute resolution, full client transparency, and historical payroll reconstruction.
+
+### Step 7: Payroll-Ready Output
+
+The system generates a finalized payroll record including: employee_id, date, total_hours, hours per tier, applied rate, gross salary, daily quota, daily deficit, and breakdown by company and role.
+
+**Daily Deficit Logic:** `daily_deficit = max(standard_daily_quota - total_hours_worked, 0)` — deficit is never negative.
+
+---
+
 # Part B: Demo Implementation
 
 ## Live System
