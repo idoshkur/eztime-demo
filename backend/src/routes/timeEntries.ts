@@ -45,11 +45,6 @@ async function validateEntry(
     res.status(400).json({ error: { code: 'INVALID_DATE', message: 'work_date must be YYYY-MM-DD' } });
     return false;
   }
-  const today = new Date().toISOString().split('T')[0];
-  if (work_date > today) {
-    res.status(400).json({ error: { code: 'FUTURE_DATE', message: 'Cannot create entries for future dates' } });
-    return false;
-  }
   if (!isValidTime(start_time)) {
     res.status(400).json({ error: { code: 'INVALID_TIME', message: 'start_time must be HH:MM (00:00–23:59)' } });
     return false;
