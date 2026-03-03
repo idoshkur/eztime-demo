@@ -40,6 +40,10 @@ export default function AdminDashboard() {
             <div className="kpi-label">Total Hours</div>
           </div>
           <div className="kpi-card">
+            <div className="kpi-value">{data.totalDeficitHours.toFixed(1)}</div>
+            <div className="kpi-label">Total Deficit</div>
+          </div>
+          <div className="kpi-card">
             <div className="kpi-value">{data.uniqueDays}</div>
             <div className="kpi-label">Work Days Recorded</div>
           </div>

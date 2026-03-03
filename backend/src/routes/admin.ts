@@ -163,10 +163,40 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
     ORDER BY entry_count DESC
   `);
 
+  const totalDeficitResult = await db.execute(`
+    SELECT COALESCE(SUM(
+      CASE
+        WHEN e.standard_daily_quota > daily.daily_hours THEN e.standard_daily_quota - daily.daily_hours
+        ELSE 0
+      END
+    ), 0) as total_deficit
+    FROM (
+      SELECT
+        t.employee_id,
+        t.work_date,
+        SUM(
+          CASE
+            WHEN (CAST(substr(t.end_time,1,2) AS INT)*60 + CAST(substr(t.end_time,4,2) AS INT))
+               > (CAST(substr(t.start_time,1,2) AS INT)*60 + CAST(substr(t.start_time,4,2) AS INT))
+            THEN (CAST(substr(t.end_time,1,2) AS INT)*60 + CAST(substr(t.end_time,4,2) AS INT))
+               - (CAST(substr(t.start_time,1,2) AS INT)*60 + CAST(substr(t.start_time,4,2) AS INT))
+            ELSE (CAST(substr(t.end_time,1,2) AS INT)*60 + CAST(substr(t.end_time,4,2) AS INT))
+               - (CAST(substr(t.start_time,1,2) AS INT)*60 + CAST(substr(t.start_time,4,2) AS INT))
+               + 1440
+          END
+        ) / 60.0 as daily_hours
+      FROM time_entries t
+      GROUP BY t.employee_id, t.work_date
+    ) daily
+    JOIN employees e ON daily.employee_id = e.employee_id
+  `);
+  const totalDeficitHours = (totalDeficitResult.rows[0] as unknown as { total_deficit: number }).total_deficit;
+
   res.json({
     employeeCount,
     totalEntries,
     totalHoursWorked: Math.round((totalHoursWorked as number) * 100) / 100,
+    totalDeficitHours: Math.round((totalDeficitHours as number) * 100) / 100,
     uniqueDays,
     entriesPerDay: entriesPerDayResult.rows,
     hoursPerEmployee: hoursPerEmployeeResult.rows,

@@ -236,7 +236,7 @@ The employee-facing interface allows:
 
 The admin panel provides full management capabilities:
 
-- **Dashboard** — KPI overview: active employees, total entries, total hours, unique work days. Charts for entries per day, hours per employee, and entries by company.
+- **Dashboard** — KPI overview: active employees, total entries, total hours worked, total deficit hours (missing hours vs quota), and unique work days. Tables for hours per employee, entries by company, and recent daily activity.
 - **Upload Excel** — Bulk import of employees, rates, and time entries from .xlsx files. The parser matches the structure of the provided Excel file (employees sheet, rates sheet, time entries sheet). Handles upsert logic — existing records are updated, new ones are inserted, duplicates are skipped.
 - **Manage Employees** — Full CRUD operations:
   - Create new employees with ID, name, status, daily quota, allowed companies, and allowed roles

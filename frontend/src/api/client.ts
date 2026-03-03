@@ -81,6 +81,7 @@ export interface DashboardData {
   employeeCount: number;
   totalEntries: number;
   totalHoursWorked: number;
+  totalDeficitHours: number;
   uniqueDays: number;
   entriesPerDay: { work_date: string; entry_count: number; employee_count: number }[];
   hoursPerEmployee: { employee_id: string; full_name: string; entry_count: number; days_worked: number; total_hours: number }[];
