@@ -30,6 +30,8 @@ export default function AdminInsights() {
   const [payrollLoading, setPayrollLoading] = useState(false);
   const [payrollError, setPayrollError] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const [exportAllMonth, setExportAllMonth] = useState('');
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   useEffect(() => {
     api.getEmployees().then(setEmployees).catch(() => {});
@@ -92,6 +94,18 @@ export default function AdminInsights() {
       setPayrollError('Failed to download Excel file.');
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleDownloadAllExcel = async () => {
+    if (!exportAllMonth) return;
+    setDownloadingAll(true);
+    try {
+      await api.downloadAllPayrollExcel(exportAllMonth);
+    } catch {
+      setPayrollError('Failed to download all-employees Excel file.');
+    } finally {
+      setDownloadingAll(false);
     }
   };
 
@@ -325,6 +339,26 @@ export default function AdminInsights() {
         <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
           Payroll Report
         </h2>
+
+        {/* Global Export: All Employees */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.75rem', marginBottom: '1.25rem', padding: '0.75rem', background: 'var(--bg-alt, #f9fafb)', borderRadius: '8px' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label htmlFor="export-all-month">Month</label>
+            <input
+              id="export-all-month"
+              type="month"
+              value={exportAllMonth}
+              onChange={(e) => setExportAllMonth(e.target.value)}
+            />
+          </div>
+          <button
+            className="btn-primary"
+            disabled={!exportAllMonth || downloadingAll}
+            onClick={handleDownloadAllExcel}
+          >
+            {downloadingAll ? 'Downloading...' : 'Export All Employees to Excel'}
+          </button>
+        </div>
 
         <div className="form-grid" style={{ marginBottom: '1rem' }}>
           <div className="form-group">

@@ -63,7 +63,7 @@ async function validateEntry(
 
   const empResult = await db.execute({ sql: 'SELECT employee_id FROM employees WHERE employee_id = ?', args: [employee_id] });
   if (empResult.rows.length === 0) {
-    res.status(400).json({ error: { code: 'EMPLOYEE_NOT_FOUND', message: `Employee "${employee_id}" not found` } });
+    res.status(404).json({ error: { code: 'EMPLOYEE_NOT_FOUND', message: `Employee "${employee_id}" not found` } });
     return false;
   }
 
@@ -102,7 +102,7 @@ async function validateEntry(
     args: [employee_id, company_name, role_name],
   });
   if (rateResult.rows.length === 0) {
-    res.status(400).json({
+    res.status(404).json({
       error: {
         code: 'RATE_NOT_FOUND',
         message: `No rate found for employee "${employee_id}" at company "${company_name}" with role "${role_name}"`,

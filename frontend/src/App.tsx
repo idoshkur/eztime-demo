@@ -22,6 +22,7 @@ export default function App() {
   const [payroll, setPayroll]               = useState<DailyPayroll | null>(null);
   const [loadingEmployees, setLoadingEmps]  = useState(true);
   const [dataError, setDataError]           = useState('');
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // Load employee list once on mount
   useEffect(() => {
@@ -55,6 +56,19 @@ export default function App() {
     setEmployee(id);
     setEntries([]);
     setPayroll(null);
+  };
+
+  const handleExportExcel = async () => {
+    if (!selectedEmployee || !selectedDate) return;
+    const month = selectedDate.slice(0, 7); // YYYY-MM
+    setExportingExcel(true);
+    try {
+      await api.downloadPayrollExcel(selectedEmployee, month);
+    } catch {
+      // silent — user sees no file downloaded
+    } finally {
+      setExportingExcel(false);
+    }
   };
 
   return (
@@ -106,6 +120,18 @@ export default function App() {
                   <>
                     <DayEntriesTable entries={entries} />
                     <PayrollSummary payroll={payroll} />
+
+                    {payroll && payroll.total_hours > 0 && (
+                      <div style={{ textAlign: 'right', marginTop: '0.75rem' }}>
+                        <button
+                          className="btn-secondary"
+                          disabled={exportingExcel}
+                          onClick={handleExportExcel}
+                        >
+                          {exportingExcel ? 'Downloading...' : 'Export Monthly Payroll to Excel'}
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
               </>

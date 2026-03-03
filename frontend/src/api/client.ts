@@ -346,4 +346,21 @@ export const api = {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   },
+
+  downloadAllPayrollExcel: async (month: string) => {
+    const res = await fetch(`${BASE}/admin/payroll-report/export-all?month=${month}`);
+    if (!res.ok) {
+      const data = await res.json();
+      throw data as ApiError;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `payroll_all_employees_${month}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 };

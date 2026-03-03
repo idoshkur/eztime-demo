@@ -1,6 +1,6 @@
 # EZTime – Attendance & Daily Payroll Demo
 
-A full-stack demo system for recording employee attendance and computing daily payroll analytics — overtime tiers, night-rule threshold, applied rates, and site/role breakdowns.
+A full-stack demo system for recording employee attendance and computing daily payroll analytics — overtime tiers, night-rule threshold, applied rates, and company/role breakdowns.
 
 ## Tech Stack
 
@@ -95,34 +95,34 @@ Column names are matched **case-insensitively** with common aliases.
 
 ### `EmployeeData` sheet
 
-| Field                  | Accepted column names                                |
-|------------------------|------------------------------------------------------|
-| Employee ID            | `employee_id`, `id`, `emp_id`, `empid`               |
-| Full Name              | `full_name`, `name`, `fullname`, `employee_name`     |
-| Status                 | `status`                                             |
-| Daily quota (hours)    | `standard_daily_quota`, `quota`, `dailyquota`, `hours` |
-| Allowed sites          | `allowed_sites`, `sites` (comma-separated string)    |
-| Allowed roles          | `allowed_roles`, `roles` (comma-separated string)    |
+| Field                  | Accepted column names                                              |
+|------------------------|--------------------------------------------------------------------|
+| Employee ID            | `employee_id`, `id`, `emp_id`, `empid`                             |
+| Full Name              | `full_name`, `name`, `fullname`, `employee_name`                   |
+| Status                 | `status`                                                           |
+| Daily quota (hours)    | `daily_standard_hours`, `standard_daily_quota`, `quota`, `hours`   |
+| Allowed companies      | `allowed_companies_csv`, `allowed_companies`, `companies`, `sites` |
+| Allowed roles          | `allowed_roles_csv`, `allowed_roles`, `roles`                      |
 
 ### `rates` sheet
 
-| Field        | Accepted column names                               |
-|--------------|-----------------------------------------------------|
-| Employee ID  | `employee_id`, `id`, `emp_id`                       |
-| Site name    | `site_name`, `site`, `sitename`, `location`         |
-| Role name    | `role_name`, `role`, `rolename`, `position`         |
-| Hourly rate  | `hourly_rate`, `rate`, `hourlyrate`, `payrate`      |
+| Field         | Accepted column names                                        |
+|---------------|--------------------------------------------------------------|
+| Employee ID   | `employee_id`, `id`, `emp_id`                                |
+| Company name  | `company_name`, `companyname`, `company`, `site_name`, `site`|
+| Role name     | `role_name`, `role`, `rolename`, `position`                  |
+| Hourly rate   | `hourly_rate`, `rate`, `hourlyrate`, `payrate`               |
 
 ### `times` sheet
 
-| Field        | Accepted column names                               |
-|--------------|-----------------------------------------------------|
-| Employee ID  | `employee_id`, `id`, `emp_id`                       |
-| Work date    | `work_date`, `date`, `workdate`, `shift_date`       |
-| Site name    | `site_name`, `site`, `sitename`                     |
-| Role name    | `role_name`, `role`, `rolename`                     |
-| Start time   | `start_time`, `start`, `starttime`, `time_in`       |
-| End time     | `end_time`, `end`, `endtime`, `time_out`            |
+| Field         | Accepted column names                                        |
+|---------------|--------------------------------------------------------------|
+| Employee ID   | `employee_id`, `id`, `emp_id`                                |
+| Work date     | `work_date`, `date`, `workdate`, `shift_date`                |
+| Company name  | `company_name`, `companyname`, `company`, `site_name`, `site`|
+| Role name     | `role_name`, `role`, `rolename`                              |
+| Start time    | `start_time`, `start`, `starttime`, `time_in`                |
+| End time      | `end_time`, `end`, `endtime`, `time_out`                     |
 
 Excel date serials and time fractions (the native Excel format) are handled automatically.
 
@@ -133,37 +133,37 @@ Excel date serials and time fractions (the native Excel format) are handled auto
 ### `GET /api/employees`
 ```json
 [
-  { "employee_id": "E01", "full_name": "Jane Smith", "status": "active", "standard_daily_quota": 9 }
+  { "employee_id": "E1001", "full_name": "דנה אלון", "status": "active", "standard_daily_quota": 9 }
 ]
 ```
 
 ### `GET /api/employees/:id/options`
 ```json
-{ "allowed_sites": ["Site A"], "allowed_roles": ["Guard", "Supervisor"] }
+{ "allowed_companies": ["חברת בת ב", "חברת בת ד"], "allowed_roles": ["מחסנאי", "קופאי"] }
 ```
 
 ### `POST /api/time-entries`
 **Body:**
 ```json
 {
-  "employee_id": "E01",
-  "work_date":   "2024-03-15",
-  "site_name":   "Site A",
-  "role_name":   "Guard",
-  "start_time":  "08:00",
-  "end_time":    "18:30"
+  "employee_id":  "E1001",
+  "work_date":    "2026-01-19",
+  "company_name": "חברת בת ב",
+  "role_name":    "מחסנאי",
+  "start_time":   "08:00",
+  "end_time":     "18:30"
 }
 ```
 **Returns 201** with the created entry, or **400** with a structured error.
 
-### `GET /api/time-entries?employee_id=E01&work_date=2024-03-15`
+### `GET /api/time-entries?employee_id=E1001&work_date=2026-01-19`
 Returns ordered list of entries for that employee/day.
 
-### `GET /api/payroll/daily?employee_id=E01&work_date=2024-03-15`
+### `GET /api/payroll/daily?employee_id=E1001&work_date=2026-01-19`
 ```json
 {
-  "employee_id":          "E01",
-  "work_date":            "2024-03-15",
+  "employee_id":          "E1001",
+  "work_date":            "2026-01-19",
   "standard_daily_quota": 9,
   "total_worked_minutes": 630,
   "total_hours":          10.50,
@@ -172,12 +172,12 @@ Returns ordered list of entries for that employee/day.
   "hours_100":            8.00,
   "hours_125":            2.00,
   "hours_150":            0.50,
-  "applied_hourly_rate":  50.00,
-  "gross_daily_salary":   550.00,
+  "applied_hourly_rate":  87.00,
+  "gross_daily_salary":   978.75,
   "daily_deficit_hours":  0.00,
   "entries":              [...],
   "breakdown_by_site_role": [
-    { "site_name": "Site A", "role_name": "Guard", "minutes": 630, "hours": 10.50, "entry_count": 1 }
+    { "company_name": "חברת בת ב", "role_name": "מחסנאי", "minutes": 630, "hours": 10.50, "entry_count": 1 }
   ]
 }
 ```
@@ -199,7 +199,7 @@ Returns ordered list of entries for that employee/day.
 | **6.4 Rate** | `applied_rate = MAX(hourly_rate)` across all entries of the day. |
 | **6.5 Gross** | `h100×rate + h125×rate×1.25 + h150×rate×1.5` |
 | **6.6 Deficit** | `max(quota − total_hours, 0)` |
-| **6.7 Breakdown** | Group entries by `(site_name, role_name)`, sum minutes. |
+| **6.7 Breakdown** | Group entries by `(company_name, role_name)`, sum minutes. |
 
 ---
 
@@ -212,6 +212,6 @@ Returns ordered list of entries for that employee/day.
 | Times are HH:MM | `INVALID_TIME` |
 | Duration 0 < d ≤ 16 h | `INVALID_DURATION` / `DURATION_TOO_LONG` |
 | Employee exists | `EMPLOYEE_NOT_FOUND` |
-| Site in allowed list | `SITE_NOT_ALLOWED` |
+| Company in allowed list | `COMPANY_NOT_ALLOWED` |
 | Role in allowed list | `ROLE_NOT_ALLOWED` |
 | Rate exists | `RATE_NOT_FOUND` |

@@ -592,4 +592,107 @@ router.get('/payroll-report/export', async (req: Request, res: Response) => {
   res.send(buffer);
 });
 
+// ─── GET /api/admin/payroll-report/export-all ─────────────────────────────
+
+router.get('/payroll-report/export-all', async (req: Request, res: Response) => {
+  const month = req.query.month as string | undefined;
+
+  if (!month) {
+    return res.status(400).json({
+      error: { code: 'MISSING_PARAMS', message: 'month (YYYY-MM) is required' },
+    });
+  }
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({
+      error: { code: 'INVALID_MONTH', message: 'month must be YYYY-MM format' },
+    });
+  }
+
+  const db = getDb();
+  const empResult = await db.execute("SELECT employee_id FROM employees WHERE status = 'active' ORDER BY full_name");
+  const employeeIds = empResult.rows.map((r) => (r as unknown as { employee_id: string }).employee_id);
+
+  if (employeeIds.length === 0) {
+    return res.status(404).json({
+      error: { code: 'NO_EMPLOYEES', message: 'No active employees found' },
+    });
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet data
+  const summaryHeaders = ['Employee ID', 'Name', 'Work Days', 'Total Hours', 'Total Deficit', 'Hours 100%', 'Hours 125%', 'Hours 150%', 'Monthly Salary'];
+  const summaryRows: (string | number)[][] = [];
+
+  for (const empId of employeeIds) {
+    const report = await buildPayrollReport(empId, month);
+    if (!report) continue;
+
+    // Add to summary
+    summaryRows.push([
+      report.employee.employee_id,
+      report.employee.full_name,
+      report.monthly.work_days,
+      report.monthly.total_hours,
+      report.monthly.total_deficit,
+      report.monthly.total_hours_100,
+      report.monthly.total_hours_125,
+      report.monthly.total_hours_150,
+      report.monthly.total_salary,
+    ]);
+
+    // Create per-employee sheet
+    if (report.days.length > 0) {
+      const dayHeaders = ['Date', 'Hours Worked', 'Quota', 'Deficit', '100% Hours', '125% Hours', '150% Hours', 'Hourly Rate', 'Daily Pay', 'Night Min'];
+      const dayRows = report.days.map((d) => [
+        d.work_date, d.total_hours, d.standard_daily_quota, d.daily_deficit_hours,
+        d.hours_100, d.hours_125, d.hours_150, d.applied_hourly_rate, d.gross_daily_salary, d.night_minutes,
+      ]);
+      dayRows.push([
+        'TOTAL', report.monthly.total_hours, '', report.monthly.total_deficit,
+        report.monthly.total_hours_100, report.monthly.total_hours_125, report.monthly.total_hours_150,
+        '', report.monthly.total_salary, '',
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet([
+        [`Payroll: ${report.employee.full_name} (${report.employee.employee_id}) — ${month}`],
+        [],
+        dayHeaders,
+        ...dayRows,
+      ]);
+      ws['!cols'] = [
+        { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 8 },
+        { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+      ];
+
+      // Sheet name max 31 chars
+      const sheetName = report.employee.full_name.slice(0, 28);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+  }
+
+  // Add summary sheet first
+  const summaryWs = XLSX.utils.aoa_to_sheet([
+    [`All Employees Payroll Summary — ${month}`],
+    [],
+    summaryHeaders,
+    ...summaryRows,
+  ]);
+  summaryWs['!cols'] = [
+    { wch: 14 }, { wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+    { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 },
+  ];
+
+  // Insert summary as the first sheet
+  wb.SheetNames.unshift('Summary');
+  wb.Sheets['Summary'] = summaryWs;
+
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  const filename = `payroll_all_employees_${month}.xlsx`;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buffer);
+});
+
 export default router;
