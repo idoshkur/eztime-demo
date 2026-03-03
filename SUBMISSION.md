@@ -3,12 +3,14 @@
 
 **Live System:** https://eztime-demo.onrender.com
 **Source Code:** https://github.com/idoshkur/eztime-demo
+**Database:** https://app.turso.tech/idoshkur/databases/eztime
+**Hosting:** https://dashboard.render.com/web/srv-d6jcvqngi27c73d35le0
 
 ---
 
 ## AI Tools 
 
-This project was built with extensive use of AI tools:
+This project was built with the follwoing AI tools:
 - **Claude Code (Anthropic)** — Used for the entire codebase implementation: backend, frontend, database, deployment, and debugging. All code was generated, reviewed, and iterated through Claude Code.
 - **ChatGPT (OpenAI)** — Used for initial PRD (Product Requirements Document) creation and product specification drafts.
 - **Gemini (Google)** — Used for additional spec refinement and architectural brainstorming.
