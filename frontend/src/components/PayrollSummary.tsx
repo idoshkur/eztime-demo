@@ -135,6 +135,15 @@ export default function PayrollSummary({ payroll }: Props) {
           </div>
         )}
 
+        {/* Warnings */}
+        {payroll.warnings && payroll.warnings.length > 0 && (
+          <div className="summary-section">
+            {payroll.warnings.map((w, i) => (
+              <div key={i} className="alert alert-error">{w}</div>
+            ))}
+          </div>
+        )}
+
       </div>
     </section>
   );

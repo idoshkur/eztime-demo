@@ -45,6 +45,11 @@ async function validateEntry(
     res.status(400).json({ error: { code: 'INVALID_DATE', message: 'work_date must be YYYY-MM-DD' } });
     return false;
   }
+  const today = new Date().toISOString().split('T')[0];
+  if (work_date > today) {
+    res.status(400).json({ error: { code: 'FUTURE_DATE', message: 'Cannot create entries for future dates' } });
+    return false;
+  }
   if (!isValidTime(start_time)) {
     res.status(400).json({ error: { code: 'INVALID_TIME', message: 'start_time must be HH:MM (00:00–23:59)' } });
     return false;
@@ -224,19 +229,29 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   const db = getDb();
-  const valid = await validateEntry(db, res, employee_id, work_date, company_name, role_name, start_time, end_time);
-  if (!valid) return;
+  const tx = await db.transaction('write');
+  try {
+    const valid = await validateEntry(
+      tx as unknown as ReturnType<typeof getDb>,
+      res, employee_id, work_date, company_name, role_name, start_time, end_time,
+    );
+    if (!valid) { await tx.rollback(); return; }
 
-  const id = uuidv4();
-  const created_at = new Date().toISOString();
-  await db.execute({
-    sql: `INSERT INTO time_entries (id, work_date, employee_id, company_name, role_name, start_time, end_time, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [id, work_date, employee_id, company_name, role_name, start_time, end_time, created_at],
-  });
+    const id = uuidv4();
+    const created_at = new Date().toISOString();
+    await tx.execute({
+      sql: `INSERT INTO time_entries (id, work_date, employee_id, company_name, role_name, start_time, end_time, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [id, work_date, employee_id, company_name, role_name, start_time, end_time, created_at],
+    });
+    await tx.commit();
 
-  const entryResult = await db.execute({ sql: 'SELECT * FROM time_entries WHERE id = ?', args: [id] });
-  return res.status(201).json(entryResult.rows[0]);
+    const entryResult = await db.execute({ sql: 'SELECT * FROM time_entries WHERE id = ?', args: [id] });
+    return res.status(201).json(entryResult.rows[0]);
+  } catch (err) {
+    try { await tx.rollback(); } catch { /* already rolled back */ }
+    throw err;
+  }
 });
 
 // ─── GET /api/time-entries?employee_id=...&work_date=... ─────────────────────
@@ -288,16 +303,26 @@ router.put('/:id', async (req: Request, res: Response) => {
   const end_time     = body.end_time     ?? (existing.end_time as string);
   const employee_id  = existing.employee_id as string;
 
-  const valid = await validateEntry(db, res, employee_id, work_date, company_name, role_name, start_time, end_time, id);
-  if (!valid) return;
+  const tx = await db.transaction('write');
+  try {
+    const valid = await validateEntry(
+      tx as unknown as ReturnType<typeof getDb>,
+      res, employee_id, work_date, company_name, role_name, start_time, end_time, id,
+    );
+    if (!valid) { await tx.rollback(); return; }
 
-  await db.execute({
-    sql: 'UPDATE time_entries SET work_date = ?, company_name = ?, role_name = ?, start_time = ?, end_time = ? WHERE id = ?',
-    args: [work_date, company_name, role_name, start_time, end_time, id],
-  });
+    await tx.execute({
+      sql: 'UPDATE time_entries SET work_date = ?, company_name = ?, role_name = ?, start_time = ?, end_time = ? WHERE id = ?',
+      args: [work_date, company_name, role_name, start_time, end_time, id],
+    });
+    await tx.commit();
 
-  const updatedResult = await db.execute({ sql: 'SELECT * FROM time_entries WHERE id = ?', args: [id] });
-  res.json(updatedResult.rows[0]);
+    const updatedResult = await db.execute({ sql: 'SELECT * FROM time_entries WHERE id = ?', args: [id] });
+    res.json(updatedResult.rows[0]);
+  } catch (err) {
+    try { await tx.rollback(); } catch { /* already rolled back */ }
+    throw err;
+  }
 });
 
 // ─── DELETE /api/time-entries/:id ─────────────────────────────────────────────

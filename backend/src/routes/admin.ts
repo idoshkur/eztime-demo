@@ -584,7 +584,14 @@ router.get('/payroll-report/export', async (req: Request, res: Response) => {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Daily Payroll');
 
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  let buffer: Buffer;
+  try {
+    buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  } catch {
+    return res.status(500).json({
+      error: { code: 'EXPORT_FAILED', message: 'Failed to generate Excel file' },
+    });
+  }
 
   const filename = `payroll_${employee_id}_${month}.xlsx`;
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -707,7 +714,14 @@ router.get('/payroll-report/export-all', async (req: Request, res: Response) => 
   wb.SheetNames.unshift('Summary');
   wb.Sheets['Summary'] = summaryWs;
 
-  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  let buffer: Buffer;
+  try {
+    buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  } catch {
+    return res.status(500).json({
+      error: { code: 'EXPORT_FAILED', message: 'Failed to generate Excel file' },
+    });
+  }
 
   const filename = `payroll_all_employees_${month}.xlsx`;
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

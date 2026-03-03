@@ -132,6 +132,8 @@ export async function calculateDailyPayroll(
 
   // 6.4 – Applied hourly rate (MAX across all entries)
   let appliedHourlyRate = 0;
+  const warnings: string[] = [];
+  const missingRates: string[] = [];
   for (const e of entries) {
     const rateResult = await db.execute({
       sql: 'SELECT hourly_rate FROM rates WHERE employee_id = ? AND company_name = ? AND role_name = ?',
@@ -141,6 +143,12 @@ export async function calculateDailyPayroll(
     if (row && row.hourly_rate > appliedHourlyRate) {
       appliedHourlyRate = row.hourly_rate;
     }
+    if (!row) {
+      missingRates.push(`${e.company_name}/${e.role_name}`);
+    }
+  }
+  if (missingRates.length > 0) {
+    warnings.push(`No hourly rate found for: ${[...new Set(missingRates)].join(', ')} — salary may be incorrect`);
   }
 
   // 6.5 – Gross daily salary
@@ -197,5 +205,6 @@ export async function calculateDailyPayroll(
     daily_deficit_hours:  dailyDeficitHours,
     entries,
     breakdown_by_site_role: breakdownBySiteRole,
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

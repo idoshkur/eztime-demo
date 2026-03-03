@@ -47,6 +47,7 @@ export interface DailyPayroll {
   daily_deficit_hours: number;
   entries: TimeEntry[];
   breakdown_by_site_role: BreakdownItem[];
+  warnings?: string[];
 }
 
 export interface ApiError {

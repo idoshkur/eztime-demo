@@ -2,6 +2,73 @@ import { getDb } from '../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ParseResult } from '../utils/excelParser';
 
+function timeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+/** Check if a new entry overlaps with existing entries in the DB (within a transaction). */
+async function hasOverlap(
+  tx: { execute(stmt: { sql: string; args: (string | number)[] }): Promise<{ rows: unknown[] }> },
+  employee_id: string,
+  work_date: string,
+  start_time: string,
+  end_time: string,
+): Promise<boolean> {
+  const newStart = timeToMinutes(start_time);
+  let newEnd = timeToMinutes(end_time);
+  if (newEnd <= newStart) newEnd += 24 * 60;
+
+  // Same-day overlap
+  const sameDayResult = await tx.execute({
+    sql: 'SELECT start_time, end_time FROM time_entries WHERE employee_id = ? AND work_date = ?',
+    args: [employee_id, work_date],
+  });
+  for (const row of sameDayResult.rows) {
+    const ex = row as unknown as { start_time: string; end_time: string };
+    const exStart = timeToMinutes(ex.start_time);
+    let exEnd = timeToMinutes(ex.end_time);
+    if (exEnd <= exStart) exEnd += 24 * 60;
+    if (newStart < exEnd && exStart < newEnd) return true;
+  }
+
+  // Previous day's overnight entries spilling into today
+  const prevDate = shiftDate(work_date, -1);
+  const prevResult = await tx.execute({
+    sql: 'SELECT start_time, end_time FROM time_entries WHERE employee_id = ? AND work_date = ?',
+    args: [employee_id, prevDate],
+  });
+  for (const row of prevResult.rows) {
+    const prev = row as unknown as { start_time: string; end_time: string };
+    const pStart = timeToMinutes(prev.start_time);
+    const pEnd = timeToMinutes(prev.end_time);
+    if (pEnd >= pStart) continue;
+    if (newStart < pEnd) return true;
+  }
+
+  // If new entry crosses midnight, check next day
+  if (timeToMinutes(end_time) <= timeToMinutes(start_time)) {
+    const nextDate = shiftDate(work_date, 1);
+    const nextResult = await tx.execute({
+      sql: 'SELECT start_time, end_time FROM time_entries WHERE employee_id = ? AND work_date = ?',
+      args: [employee_id, nextDate],
+    });
+    const spillEnd = timeToMinutes(end_time);
+    for (const row of nextResult.rows) {
+      const next = row as unknown as { start_time: string; end_time: string };
+      if (timeToMinutes(next.start_time) < spillEnd) return true;
+    }
+  }
+
+  return false;
+}
+
 export interface EntityResult {
   inserted: number;
   updated: number;
@@ -115,6 +182,13 @@ export async function upsertExcelData(parsed: ParseResult): Promise<UploadResult
       });
       if (dupResult.rows.length > 0) {
         entryResult.duplicates++;
+        continue;
+      }
+
+      // Overlap check (same-day + cross-day)
+      if (await hasOverlap(tx as Parameters<typeof hasOverlap>[0], t.employee_id, t.work_date, t.start_time, t.end_time)) {
+        warnings.push(`Entry skipped – overlap: ${t.employee_id} on ${t.work_date} (${t.start_time}–${t.end_time})`);
+        entryResult.skipped++;
         continue;
       }
 
