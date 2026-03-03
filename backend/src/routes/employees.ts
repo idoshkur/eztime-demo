@@ -3,6 +3,73 @@ import { getDb } from '../db';
 
 const router = Router();
 
+// POST /api/employees
+router.post('/', async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+  const { employee_id, full_name } = body as { employee_id: string; full_name: string };
+  const status = (body.status as string) || 'active';
+  const standard_daily_quota = (body.standard_daily_quota as number) || 8;
+  const allowed_companies = (body.allowed_companies as string[]) || [];
+  const allowed_roles = (body.allowed_roles as string[]) || [];
+
+  if (!employee_id || !full_name) {
+    return res.status(400).json({
+      error: { code: 'MISSING_FIELDS', message: 'employee_id and full_name are required' },
+    });
+  }
+  if (!['active', 'inactive'].includes(status)) {
+    return res.status(400).json({
+      error: { code: 'INVALID_STATUS', message: 'status must be "active" or "inactive"' },
+    });
+  }
+  if (typeof standard_daily_quota !== 'number' || standard_daily_quota <= 0) {
+    return res.status(400).json({
+      error: { code: 'INVALID_QUOTA', message: 'standard_daily_quota must be a positive number' },
+    });
+  }
+
+  const db = getDb();
+  const existingResult = await db.execute({
+    sql: 'SELECT 1 FROM employees WHERE employee_id = ?',
+    args: [employee_id],
+  });
+  if (existingResult.rows.length > 0) {
+    return res.status(409).json({
+      error: { code: 'EMPLOYEE_EXISTS', message: `Employee "${employee_id}" already exists` },
+    });
+  }
+
+  const tx = await db.transaction('write');
+  try {
+    await tx.execute({
+      sql: 'INSERT INTO employees (employee_id, full_name, status, standard_daily_quota) VALUES (?, ?, ?, ?)',
+      args: [employee_id, full_name, status, standard_daily_quota],
+    });
+    for (const c of allowed_companies) {
+      await tx.execute({
+        sql: 'INSERT OR IGNORE INTO employee_allowed_companies (employee_id, company_name) VALUES (?, ?)',
+        args: [employee_id, c],
+      });
+    }
+    for (const r of allowed_roles) {
+      await tx.execute({
+        sql: 'INSERT OR IGNORE INTO employee_allowed_roles (employee_id, role_name) VALUES (?, ?)',
+        args: [employee_id, r],
+      });
+    }
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+
+  const result = await db.execute({
+    sql: 'SELECT employee_id, full_name, status, standard_daily_quota FROM employees WHERE employee_id = ?',
+    args: [employee_id],
+  });
+  res.status(201).json(result.rows[0]);
+});
+
 // GET /api/employees
 router.get('/', async (_req: Request, res: Response) => {
   const db = getDb();

@@ -172,6 +172,108 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
   });
 });
 
+// ─── Rate Management ─────────────────────────────────────────────────────────
+
+router.get('/rates', async (req: Request, res: Response) => {
+  const db = getDb();
+  const employee_id = req.query.employee_id as string | undefined;
+
+  if (employee_id) {
+    const result = await db.execute({
+      sql: 'SELECT * FROM rates WHERE employee_id = ? ORDER BY company_name, role_name',
+      args: [employee_id],
+    });
+    return res.json(result.rows);
+  }
+
+  const result = await db.execute('SELECT * FROM rates ORDER BY employee_id, company_name, role_name');
+  res.json(result.rows);
+});
+
+router.post('/rates', async (req: Request, res: Response) => {
+  const { employee_id, company_name, role_name, hourly_rate } = req.body as Record<string, unknown>;
+
+  if (!employee_id || !company_name || !role_name || hourly_rate === undefined) {
+    return res.status(400).json({
+      error: { code: 'MISSING_FIELDS', message: 'employee_id, company_name, role_name, and hourly_rate are required' },
+    });
+  }
+  if (typeof hourly_rate !== 'number' || hourly_rate <= 0) {
+    return res.status(400).json({
+      error: { code: 'INVALID_RATE', message: 'hourly_rate must be a positive number' },
+    });
+  }
+
+  const db = getDb();
+  const existingResult = await db.execute({
+    sql: 'SELECT 1 FROM rates WHERE employee_id = ? AND company_name = ? AND role_name = ?',
+    args: [employee_id as string, company_name as string, role_name as string],
+  });
+  if (existingResult.rows.length > 0) {
+    return res.status(409).json({
+      error: { code: 'RATE_EXISTS', message: 'Rate already exists for this employee/company/role combination' },
+    });
+  }
+
+  await db.execute({
+    sql: 'INSERT INTO rates (employee_id, company_name, role_name, hourly_rate) VALUES (?, ?, ?, ?)',
+    args: [employee_id as string, company_name as string, role_name as string, hourly_rate],
+  });
+
+  res.status(201).json({ employee_id, company_name, role_name, hourly_rate });
+});
+
+router.put('/rates', async (req: Request, res: Response) => {
+  const { employee_id, company_name, role_name, hourly_rate } = req.body as Record<string, unknown>;
+
+  if (!employee_id || !company_name || !role_name || hourly_rate === undefined) {
+    return res.status(400).json({
+      error: { code: 'MISSING_FIELDS', message: 'employee_id, company_name, role_name, and hourly_rate are required' },
+    });
+  }
+  if (typeof hourly_rate !== 'number' || hourly_rate <= 0) {
+    return res.status(400).json({
+      error: { code: 'INVALID_RATE', message: 'hourly_rate must be a positive number' },
+    });
+  }
+
+  const db = getDb();
+  const result = await db.execute({
+    sql: 'UPDATE rates SET hourly_rate = ? WHERE employee_id = ? AND company_name = ? AND role_name = ?',
+    args: [hourly_rate, employee_id as string, company_name as string, role_name as string],
+  });
+  if (result.rowsAffected === 0) {
+    return res.status(404).json({
+      error: { code: 'RATE_NOT_FOUND', message: 'Rate not found' },
+    });
+  }
+
+  res.json({ employee_id, company_name, role_name, hourly_rate });
+});
+
+router.delete('/rates', async (req: Request, res: Response) => {
+  const { employee_id, company_name, role_name } = req.body as Record<string, string>;
+
+  if (!employee_id || !company_name || !role_name) {
+    return res.status(400).json({
+      error: { code: 'MISSING_FIELDS', message: 'employee_id, company_name, and role_name are required' },
+    });
+  }
+
+  const db = getDb();
+  const result = await db.execute({
+    sql: 'DELETE FROM rates WHERE employee_id = ? AND company_name = ? AND role_name = ?',
+    args: [employee_id, company_name, role_name],
+  });
+  if (result.rowsAffected === 0) {
+    return res.status(404).json({
+      error: { code: 'RATE_NOT_FOUND', message: 'Rate not found' },
+    });
+  }
+
+  res.json({ success: true });
+});
+
 // ─── GET /api/admin/insights ─────────────────────────────────────────────────
 
 const HOURS_SQL = `

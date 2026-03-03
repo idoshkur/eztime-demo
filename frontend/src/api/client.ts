@@ -106,6 +106,24 @@ export interface DeleteEmployeeResult {
   deleted: { time_entries: number; rates: number; allowed_companies: number; allowed_roles: number };
 }
 
+// ─── Rate & Create types ─────────────────────────────────────────────────────
+
+export interface Rate {
+  employee_id: string;
+  company_name: string;
+  role_name: string;
+  hourly_rate: number;
+}
+
+export interface CreateEmployeeBody {
+  employee_id: string;
+  full_name: string;
+  status: string;
+  standard_daily_quota: number;
+  allowed_companies: string[];
+  allowed_roles: string[];
+}
+
 // ─── Insights types ──────────────────────────────────────────────────────────
 
 export interface InsightsFilters {
@@ -189,6 +207,9 @@ export const api = {
   getEmployees: () =>
     request<Employee[]>('/employees'),
 
+  createEmployee: (body: CreateEmployeeBody) =>
+    request<Employee>('/employees', { method: 'POST', body: JSON.stringify(body) }),
+
   getEmployeeOptions: (employeeId: string) =>
     request<EmployeeOptions>(`/employees/${employeeId}/options`),
 
@@ -245,6 +266,21 @@ export const api = {
 
   deleteEmployee: (id: string) =>
     request<DeleteEmployeeResult>(`/employees/${id}`, { method: 'DELETE' }),
+
+  // Rates
+  getRates: (employeeId?: string) => {
+    const qs = employeeId ? `?employee_id=${employeeId}` : '';
+    return request<Rate[]>(`/admin/rates${qs}`);
+  },
+
+  createRate: (body: Rate) =>
+    request<Rate>('/admin/rates', { method: 'POST', body: JSON.stringify(body) }),
+
+  updateRate: (body: Rate) =>
+    request<Rate>('/admin/rates', { method: 'PUT', body: JSON.stringify(body) }),
+
+  deleteRate: (body: { employee_id: string; company_name: string; role_name: string }) =>
+    request<{ success: true }>('/admin/rates', { method: 'DELETE', body: JSON.stringify(body) }),
 
   // Insights
   getInsights: (filters?: InsightsFilters) => {

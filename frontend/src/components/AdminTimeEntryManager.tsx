@@ -23,6 +23,14 @@ export default function AdminTimeEntryManager() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Create entry form
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    employee_id: '', work_date: '', company_name: '', role_name: '', start_time: '', end_time: '',
+  });
+  const [createOptions, setCreateOptions] = useState<EmployeeOptions | null>(null);
+  const [creating, setCreating] = useState(false);
+
   // Inline edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
@@ -63,6 +71,56 @@ export default function AdminTimeEntryManager() {
     setEditingId(null);
   };
 
+  // ── Create entry ──────────────────────────────────────────────────────────
+
+  const handleCreateEmployeeChange = async (empId: string) => {
+    setCreateForm({ ...createForm, employee_id: empId, company_name: '', role_name: '' });
+    setCreateOptions(null);
+    if (!empId) return;
+    try {
+      const opts = await api.getEmployeeOptions(empId);
+      setCreateOptions(opts);
+      if (opts.allowed_companies.length > 0) {
+        setCreateForm((prev) => ({ ...prev, company_name: opts.allowed_companies[0] }));
+      }
+      if (opts.allowed_roles.length > 0) {
+        setCreateForm((prev) => ({ ...prev, role_name: opts.allowed_roles[0] }));
+      }
+    } catch {
+      setCreateOptions(null);
+    }
+  };
+
+  const handleCreate = async () => {
+    setCreating(true);
+    setMessage(null);
+    try {
+      await api.createTimeEntry({
+        employee_id: createForm.employee_id,
+        work_date: createForm.work_date,
+        company_name: createForm.company_name,
+        role_name: createForm.role_name,
+        start_time: createForm.start_time,
+        end_time: createForm.end_time,
+      });
+      setMessage({ type: 'success', text: 'Time entry created.' });
+      setCreateForm({ employee_id: '', work_date: '', company_name: '', role_name: '', start_time: '', end_time: '' });
+      setCreateOptions(null);
+      setShowCreate(false);
+      fetchEntries();
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setMessage({ type: 'error', text: apiErr?.error?.message ?? 'Failed to create time entry.' });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const canCreate = createForm.employee_id && createForm.work_date && createForm.company_name &&
+    createForm.role_name && createForm.start_time && createForm.end_time;
+
+  // ── Inline edit ─────────────────────────────────────────────────────────────
+
   const startEdit = async (entry: AdminTimeEntry) => {
     setEditingId(entry.id);
     setEditForm({
@@ -74,7 +132,6 @@ export default function AdminTimeEntryManager() {
     });
     setMessage(null);
 
-    // Load allowed companies/roles for this employee
     try {
       const opts = await api.getEmployeeOptions(entry.employee_id);
       setEditOptions(opts);
@@ -116,7 +173,6 @@ export default function AdminTimeEntryManager() {
     try {
       await api.deleteTimeEntry(entry.id);
       setMessage({ type: 'success', text: 'Time entry deleted.' });
-      // If current page becomes empty, go back a page
       if (entries.length === 1 && page > 1) {
         setPage(page - 1);
       } else {
@@ -130,7 +186,15 @@ export default function AdminTimeEntryManager() {
 
   return (
     <section className="card">
-      <h2>Manage Time Entries ({total})</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h2 style={{ margin: 0, border: 'none', padding: 0 }}>Manage Time Entries ({total})</h2>
+        <button
+          className={showCreate ? 'btn-secondary' : 'btn-primary'}
+          onClick={() => { setShowCreate(!showCreate); setMessage(null); }}
+        >
+          {showCreate ? 'Cancel' : '+ New Entry'}
+        </button>
+      </div>
 
       {/* Filter */}
       <div className="filter-bar">
@@ -153,8 +217,109 @@ export default function AdminTimeEntryManager() {
         <div className={`alert alert-${message.type}`} style={{ marginBottom: '1rem' }}>{message.text}</div>
       )}
 
+      {/* ── Create Time Entry Form ───────────────────────────────────────────── */}
+      {showCreate && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.25rem', marginBottom: '1.25rem', background: '#f8fafc' }}>
+          <h3 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '1rem' }}>Create New Time Entry</h3>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Employee</label>
+              <select
+                value={createForm.employee_id}
+                onChange={(e) => handleCreateEmployeeChange(e.target.value)}
+              >
+                <option value="">Select employee...</option>
+                {employees.map((emp) => (
+                  <option key={emp.employee_id} value={emp.employee_id}>
+                    {emp.full_name} ({emp.employee_id})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Work Date</label>
+              <input
+                type="date"
+                value={createForm.work_date}
+                onChange={(e) => setCreateForm({ ...createForm, work_date: e.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label>Company</label>
+              {createOptions && createOptions.allowed_companies.length > 0 ? (
+                <select
+                  value={createForm.company_name}
+                  onChange={(e) => setCreateForm({ ...createForm, company_name: e.target.value })}
+                >
+                  {createOptions.allowed_companies.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Company name"
+                  value={createForm.company_name}
+                  onChange={(e) => setCreateForm({ ...createForm, company_name: e.target.value })}
+                />
+              )}
+            </div>
+            <div className="form-group">
+              <label>Role</label>
+              {createOptions && createOptions.allowed_roles.length > 0 ? (
+                <select
+                  value={createForm.role_name}
+                  onChange={(e) => setCreateForm({ ...createForm, role_name: e.target.value })}
+                >
+                  {createOptions.allowed_roles.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Role name"
+                  value={createForm.role_name}
+                  onChange={(e) => setCreateForm({ ...createForm, role_name: e.target.value })}
+                />
+              )}
+            </div>
+            <div className="form-group">
+              <label>Start Time</label>
+              <TimeInput
+                id="create-start"
+                value={createForm.start_time}
+                onChange={(val) => setCreateForm({ ...createForm, start_time: val })}
+              />
+            </div>
+            <div className="form-group">
+              <label>End Time</label>
+              <TimeInput
+                id="create-end"
+                value={createForm.end_time}
+                onChange={(val) => setCreateForm({ ...createForm, end_time: val })}
+              />
+            </div>
+          </div>
+          {createForm.start_time && createForm.end_time && (
+            <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
+              Duration: {formatDuration(createForm.start_time, createForm.end_time)}
+            </div>
+          )}
+          <div style={{ marginTop: '1rem' }}>
+            <button
+              className="btn-primary"
+              disabled={creating || !canCreate}
+              onClick={handleCreate}
+            >
+              {creating ? 'Creating...' : 'Create Entry'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
-        <div className="loading">Loading entries…</div>
+        <div className="loading">Loading entries...</div>
       ) : entries.length === 0 ? (
         <p className="empty-state">No time entries found.</p>
       ) : (
@@ -243,7 +408,7 @@ export default function AdminTimeEntryManager() {
                       <td>
                         <div className="action-group">
                           <button className="btn-icon btn-save" onClick={saveEdit} disabled={saving}>
-                            {saving ? '…' : 'Save'}
+                            {saving ? '...' : 'Save'}
                           </button>
                           <button className="btn-icon btn-cancel" onClick={cancelEdit} disabled={saving}>
                             Cancel
