@@ -187,6 +187,12 @@ export default function AdminInsights() {
               <div className="kpi-label">Total Hours</div>
             </div>
             <div className="kpi-card">
+              <div className="kpi-value" style={{ color: data.summary.totalDeficit > 0 ? 'var(--red)' : 'var(--green)' }}>
+                {round2(data.summary.totalDeficit)}
+              </div>
+              <div className="kpi-label">Total Deficit</div>
+            </div>
+            <div className="kpi-card">
               <div className="kpi-value">{data.summary.totalEntries}</div>
               <div className="kpi-label">Entries</div>
             </div>
@@ -210,6 +216,7 @@ export default function AdminInsights() {
                     <tr>
                       <th>Employee</th>
                       <th>Total Hours</th>
+                      <th>Deficit</th>
                       <th>Entries</th>
                       <th>Days Worked</th>
                     </tr>
@@ -219,6 +226,7 @@ export default function AdminInsights() {
                       <tr key={row.employee_id}>
                         <td>{row.full_name} ({row.employee_id})</td>
                         <td className="mono">{round2(row.total_hours)}</td>
+                        <td className="mono" style={{ color: row.deficit > 0 ? 'var(--red)' : 'var(--green)' }}>{round2(row.deficit)}</td>
                         <td>{row.entry_count}</td>
                         <td>{row.days_worked}</td>
                       </tr>
@@ -239,6 +247,7 @@ export default function AdminInsights() {
                     <tr>
                       <th>Company</th>
                       <th>Total Hours</th>
+                      <th>Deficit</th>
                       <th>Entries</th>
                       <th>Employees</th>
                     </tr>
@@ -248,6 +257,7 @@ export default function AdminInsights() {
                       <tr key={row.company_name}>
                         <td>{row.company_name}</td>
                         <td className="mono">{round2(row.total_hours)}</td>
+                        <td className="mono" style={{ color: row.deficit > 0 ? 'var(--red)' : 'var(--green)' }}>{round2(row.deficit)}</td>
                         <td>{row.entry_count}</td>
                         <td>{row.employee_count}</td>
                       </tr>
@@ -268,6 +278,7 @@ export default function AdminInsights() {
                     <tr>
                       <th>Role</th>
                       <th>Total Hours</th>
+                      <th>Deficit</th>
                       <th>Entries</th>
                     </tr>
                   </thead>
@@ -276,6 +287,7 @@ export default function AdminInsights() {
                       <tr key={row.role_name}>
                         <td>{row.role_name}</td>
                         <td className="mono">{round2(row.total_hours)}</td>
+                        <td className="mono" style={{ color: row.deficit > 0 ? 'var(--red)' : 'var(--green)' }}>{round2(row.deficit)}</td>
                         <td>{row.entry_count}</td>
                       </tr>
                     ))}
@@ -296,6 +308,7 @@ export default function AdminInsights() {
                       <th>Company</th>
                       <th>Role</th>
                       <th>Total Hours</th>
+                      <th>Deficit</th>
                       <th>Entries</th>
                     </tr>
                   </thead>
@@ -305,6 +318,7 @@ export default function AdminInsights() {
                         <td>{row.company_name}</td>
                         <td>{row.role_name}</td>
                         <td className="mono">{round2(row.total_hours)}</td>
+                        <td className="mono" style={{ color: row.deficit > 0 ? 'var(--red)' : 'var(--green)' }}>{round2(row.deficit)}</td>
                         <td>{row.entry_count}</td>
                       </tr>
                     ))}
@@ -324,6 +338,7 @@ export default function AdminInsights() {
                     <tr>
                       <th>Date</th>
                       <th>Total Hours</th>
+                      <th>Deficit</th>
                       <th>Entries</th>
                     </tr>
                   </thead>
@@ -332,6 +347,7 @@ export default function AdminInsights() {
                       <tr key={row.work_date}>
                         <td className="mono">{row.work_date}</td>
                         <td className="mono">{round2(row.total_hours)}</td>
+                        <td className="mono" style={{ color: row.deficit > 0 ? 'var(--red)' : 'var(--green)' }}>{round2(row.deficit)}</td>
                         <td>{row.entry_count}</td>
                       </tr>
                     ))}

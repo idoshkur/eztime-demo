@@ -192,6 +192,32 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
   `);
   const totalDeficitHours = (totalDeficitResult.rows[0] as unknown as { total_deficit: number }).total_deficit;
 
+  // Per-employee deficit for the hours-by-employee table
+  const empDeficitResult = await db.execute(`
+    SELECT
+      daily.employee_id,
+      COALESCE(SUM(
+        CASE WHEN e.standard_daily_quota > daily.daily_hours
+        THEN e.standard_daily_quota - daily.daily_hours ELSE 0 END
+      ), 0) as deficit
+    FROM (
+      SELECT employee_id, work_date, SUM(${HOURS_SQL}) / 60.0 as daily_hours
+      FROM time_entries
+      GROUP BY employee_id, work_date
+    ) daily
+    JOIN employees e ON daily.employee_id = e.employee_id
+    GROUP BY daily.employee_id
+  `);
+  const deficitMap = new Map<string, number>();
+  for (const row of empDeficitResult.rows) {
+    const r = row as unknown as { employee_id: string; deficit: number };
+    deficitMap.set(r.employee_id, Math.round(Number(r.deficit) * 100) / 100);
+  }
+  const hoursPerEmployee = hoursPerEmployeeResult.rows.map((row) => {
+    const r = row as unknown as { employee_id: string };
+    return { ...row, deficit: deficitMap.get(r.employee_id) || 0 };
+  });
+
   res.json({
     employeeCount,
     totalEntries,
@@ -199,7 +225,7 @@ router.get('/dashboard', async (_req: Request, res: Response) => {
     totalDeficitHours: Math.round((totalDeficitHours as number) * 100) / 100,
     uniqueDays,
     entriesPerDay: entriesPerDayResult.rows,
-    hoursPerEmployee: hoursPerEmployeeResult.rows,
+    hoursPerEmployee,
     entriesByCompany: entriesByCompanyResult.rows,
   });
 });
@@ -420,6 +446,54 @@ router.get('/insights', async (req: Request, res: Response) => {
   const companiesResult = await db.execute('SELECT DISTINCT company_name FROM time_entries ORDER BY company_name');
   const rolesResult = await db.execute('SELECT DISTINCT role_name FROM time_entries ORDER BY role_name');
 
+  // Proportional deficit per entry (attributes employee-day deficit to entries by hours ratio)
+  const deficitResult = await db.execute({
+    sql: `
+      SELECT
+        t.employee_id,
+        t.work_date,
+        t.company_name,
+        t.role_name,
+        CASE
+          WHEN e.standard_daily_quota > daily.daily_hours
+          THEN (e.standard_daily_quota - daily.daily_hours) * ((${HOURS_SQL}) / 60.0)
+               / CASE WHEN daily.daily_hours > 0 THEN daily.daily_hours ELSE 1 END
+          ELSE 0
+        END as entry_deficit
+      FROM time_entries t
+      JOIN employees e ON t.employee_id = e.employee_id
+      JOIN (
+        SELECT employee_id, work_date, SUM(${HOURS_SQL}) / 60.0 as daily_hours
+        FROM time_entries
+        GROUP BY employee_id, work_date
+      ) daily ON t.employee_id = daily.employee_id AND t.work_date = daily.work_date
+      ${where}
+    `,
+    args: params,
+  });
+
+  // Aggregate deficit by dimensions
+  let totalDeficit = 0;
+  const deficitByEmployee: Record<string, number> = {};
+  const deficitByDate: Record<string, number> = {};
+  const deficitByCompany: Record<string, number> = {};
+  const deficitByRole: Record<string, number> = {};
+  const deficitByCompanyRole: Record<string, number> = {};
+
+  for (const row of deficitResult.rows) {
+    const r = row as unknown as { employee_id: string; work_date: string; company_name: string; role_name: string; entry_deficit: number };
+    const d = Number(r.entry_deficit) || 0;
+    totalDeficit += d;
+    deficitByEmployee[r.employee_id] = (deficitByEmployee[r.employee_id] || 0) + d;
+    deficitByDate[r.work_date] = (deficitByDate[r.work_date] || 0) + d;
+    deficitByCompany[r.company_name] = (deficitByCompany[r.company_name] || 0) + d;
+    deficitByRole[r.role_name] = (deficitByRole[r.role_name] || 0) + d;
+    const crKey = `${r.company_name}|||${r.role_name}`;
+    deficitByCompanyRole[crKey] = (deficitByCompanyRole[crKey] || 0) + d;
+  }
+
+  const rd = (n: number) => Math.round(n * 100) / 100;
+
   res.json({
     filters: { employee_id, company_name, role_name, date_from, date_to },
     availableCompanies: companiesResult.rows.map((r) => (r as unknown as { company_name: string }).company_name),
@@ -427,16 +501,33 @@ router.get('/insights', async (req: Request, res: Response) => {
     summary: {
       totalEntries: summary.totalEntries,
       totalHours: Math.round(summary.totalHours * 100) / 100,
+      totalDeficit: rd(totalDeficit),
       uniqueDays: summary.uniqueDays,
       uniqueEmployees: summary.uniqueEmployees,
       uniqueCompanies: summary.uniqueCompanies,
       avgHoursPerDay,
     },
-    byEmployee: byEmployeeResult.rows,
-    byCompany: byCompanyResult.rows,
-    byRole: byRoleResult.rows,
-    byDate: byDateResult.rows,
-    byCompanyRole: byCompanyRoleResult.rows,
+    byEmployee: byEmployeeResult.rows.map((row) => {
+      const r = row as unknown as { employee_id: string };
+      return { ...row, deficit: rd(deficitByEmployee[r.employee_id] || 0) };
+    }),
+    byCompany: byCompanyResult.rows.map((row) => {
+      const r = row as unknown as { company_name: string };
+      return { ...row, deficit: rd(deficitByCompany[r.company_name] || 0) };
+    }),
+    byRole: byRoleResult.rows.map((row) => {
+      const r = row as unknown as { role_name: string };
+      return { ...row, deficit: rd(deficitByRole[r.role_name] || 0) };
+    }),
+    byDate: byDateResult.rows.map((row) => {
+      const r = row as unknown as { work_date: string };
+      return { ...row, deficit: rd(deficitByDate[r.work_date] || 0) };
+    }),
+    byCompanyRole: byCompanyRoleResult.rows.map((row) => {
+      const r = row as unknown as { company_name: string; role_name: string };
+      const crKey = `${r.company_name}|||${r.role_name}`;
+      return { ...row, deficit: rd(deficitByCompanyRole[crKey] || 0) };
+    }),
   });
 });
 

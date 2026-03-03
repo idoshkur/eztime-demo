@@ -84,7 +84,7 @@ export interface DashboardData {
   totalDeficitHours: number;
   uniqueDays: number;
   entriesPerDay: { work_date: string; entry_count: number; employee_count: number }[];
-  hoursPerEmployee: { employee_id: string; full_name: string; entry_count: number; days_worked: number; total_hours: number }[];
+  hoursPerEmployee: { employee_id: string; full_name: string; entry_count: number; days_worked: number; total_hours: number; deficit: number }[];
   entriesByCompany: { company_name: string; entry_count: number; employee_count: number }[];
 }
 
@@ -139,6 +139,7 @@ export interface InsightsFilters {
 export interface InsightsSummary {
   totalEntries: number;
   totalHours: number;
+  totalDeficit: number;
   uniqueDays: number;
   uniqueEmployees: number;
   uniqueCompanies: number;
@@ -149,6 +150,7 @@ export interface InsightsByEmployee {
   employee_id: string;
   full_name: string;
   total_hours: number;
+  deficit: number;
   entry_count: number;
   days_worked: number;
 }
@@ -156,6 +158,7 @@ export interface InsightsByEmployee {
 export interface InsightsByCompany {
   company_name: string;
   total_hours: number;
+  deficit: number;
   entry_count: number;
   employee_count: number;
 }
@@ -163,12 +166,14 @@ export interface InsightsByCompany {
 export interface InsightsByRole {
   role_name: string;
   total_hours: number;
+  deficit: number;
   entry_count: number;
 }
 
 export interface InsightsByDate {
   work_date: string;
   total_hours: number;
+  deficit: number;
   entry_count: number;
 }
 
@@ -176,6 +181,7 @@ export interface InsightsByCompanyRole {
   company_name: string;
   role_name: string;
   total_hours: number;
+  deficit: number;
   entry_count: number;
 }
 

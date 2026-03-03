@@ -64,6 +64,7 @@ export default function AdminDashboard() {
                 <th>ID</th>
                 <th>Days Worked</th>
                 <th>Total Hours</th>
+                <th>Deficit</th>
                 <th>Avg/Day</th>
                 <th>Entries</th>
               </tr>
@@ -75,6 +76,7 @@ export default function AdminDashboard() {
                   <td className="muted mono">{row.employee_id}</td>
                   <td className="mono">{row.days_worked}</td>
                   <td className="mono">{row.total_hours.toFixed(1)}</td>
+                  <td className="mono" style={{ color: row.deficit > 0 ? 'var(--red)' : 'var(--green)' }}>{row.deficit.toFixed(1)}</td>
                   <td className="mono">{row.days_worked > 0 ? (row.total_hours / row.days_worked).toFixed(1) : '—'}</td>
                   <td className="mono">{row.entry_count}</td>
                 </tr>
